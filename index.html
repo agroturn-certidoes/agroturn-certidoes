@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Solicitação de Certidões · Agroturn</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 21c-4-3-7-6.5-7-11a7 7 0 0 1 14 0c0 4.5-3 8-7 11Z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 7v7m-3-3 3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div>
+        <strong>Agroturn</strong>
+        <span>Certidões · Setor Fundiário</span>
+      </div>
+    </div>
+    <div id="userArea" class="user-area"></div>
+  </header>
+
+  <div id="demoBanner" class="banner" hidden>
+    <strong>Modo demonstração.</strong> Os pedidos ficam salvos só neste navegador. Preencha <code>clientId</code> em <code>config.js</code> para gravar na planilha.
+  </div>
+
+  <main class="container">
+    <!-- Tela de login -->
+    <section id="loginView" class="card login" hidden>
+      <h1>Solicitação de Certidões</h1>
+      <p class="muted">Entre com sua conta Microsoft da Agroturn para fazer ou acompanhar pedidos de matrícula, transcrição e cadeia dominial.</p>
+      <button id="loginBtn" class="btn primary">Entrar com Microsoft</button>
+    </section>
+
+    <!-- App -->
+    <section id="appView" hidden>
+      <nav class="tabs" role="tablist">
+        <button role="tab" class="tab active" data-tab="novo" aria-selected="true">Nova solicitação</button>
+        <button role="tab" class="tab" data-tab="acompanhar" aria-selected="false">Acompanhar pedidos</button>
+      </nav>
+
+      <!-- Nova solicitação -->
+      <div id="tab-novo" class="tab-panel">
+        <form id="pedidoForm" class="card" novalidate>
+          <h1>Faça seu pedido</h1>
+          <p class="muted">O pedido vai direto para a planilha do Setor Fundiário, que cuida da taxa, do boleto e do envio da certidão.</p>
+
+          <div class="grid-2">
+            <label class="field">
+              <span>Solicitante <em>*</em></span>
+              <select id="solicitante" required>
+                <option value="">Selecione seu nome</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Nome do empreendimento <em>*</em></span>
+              <input id="empreendimento" type="text" list="listaEmpreendimentos" placeholder="Ex: Fazenda Boa Ventura" required autocomplete="off">
+              <datalist id="listaEmpreendimentos"></datalist>
+            </label>
+          </div>
+
+          <div class="section-head">
+            <h2>Certidões</h2>
+            <span id="linhasInfo" class="muted small"></span>
+          </div>
+          <div id="itens"></div>
+          <button type="button" id="addItem" class="btn ghost">+ Adicionar outra certidão</button>
+
+          <div id="formError" class="alert error" hidden></div>
+
+          <div class="actions">
+            <button type="submit" id="submitBtn" class="btn primary">Enviar pedido</button>
+          </div>
+        </form>
+
+        <div id="sucesso" class="card success" hidden>
+          <div class="success-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="28" height="28"><path d="m5 12.5 4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h1>Pedido enviado</h1>
+          <p class="muted">Anote o número do pedido para acompanhar o andamento.</p>
+          <div class="protocolo">
+            <code id="protocoloOut"></code>
+            <button type="button" id="copyBtn" class="btn ghost small">Copiar</button>
+          </div>
+          <p id="sucessoResumo" class="muted small"></p>
+          <div class="actions center">
+            <button type="button" id="novoPedido" class="btn primary">Fazer outro pedido</button>
+            <button type="button" id="verPedidos" class="btn ghost">Acompanhar pedidos</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Acompanhar -->
+      <div id="tab-acompanhar" class="tab-panel" hidden>
+        <div class="card">
+          <div class="toolbar">
+            <label class="field inline">
+              <span>Solicitante</span>
+              <select id="filtroSolicitante"><option value="">Todos</option></select>
+            </label>
+            <label class="field inline grow">
+              <span>Buscar</span>
+              <input id="filtroBusca" type="search" placeholder="Protocolo, empreendimento, nº ou cartório">
+            </label>
+            <button type="button" id="refreshBtn" class="btn ghost">Atualizar</button>
+          </div>
+          <div id="statusResumo" class="chips"></div>
+          <div id="listaPedidos" class="lista"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <template id="itemTpl">
+    <fieldset class="item">
+      <legend><span class="item-n"></span><button type="button" class="link remove">Remover</button></legend>
+      <div class="field">
+        <span>Tipo de certidão <em>*</em></span>
+        <div class="seg" role="radiogroup"></div>
+      </div>
+      <div class="grid-2">
+        <label class="field">
+          <span>Nº da Matrícula/Transcrição <em>*</em></span>
+          <input class="numero" type="text" placeholder="Ex: 12345;78456" required autocomplete="off">
+          <small class="hint">Vários números? Separe com ponto e vírgula ( ; ).</small>
+        </label>
+        <label class="field">
+          <span>Cartório responsável <em>*</em></span>
+          <input class="cartorio" type="text" list="listaCartorios" placeholder="Ex: 1º Ofício de Cuiabá-MT" required autocomplete="off">
+        </label>
+      </div>
+      <label class="field obs">
+        <span>Observações</span>
+        <textarea class="observacoes" rows="2"></textarea>
+        <small class="hint obs-hint"></small>
+      </label>
+    </fieldset>
+  </template>
+  <datalist id="listaCartorios"></datalist>
+
+  <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@3.28.1/lib/msal-browser.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
