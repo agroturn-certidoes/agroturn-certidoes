@@ -3,7 +3,7 @@
 window.APP_CONFIG = {
   // ID do aplicativo (client) registrado no Microsoft Entra ID.
   // Deixe vazio ("") para rodar em MODO DEMONSTRAÇÃO (salva só no navegador, não grava na planilha).
-  clientId: "",
+  clientId: "22472c6d-12aa-4cd4-a27c-d096a26ada92",
 
   // Locatário (tenant) Microsoft 365 da Agroturn.
   tenantId: "dab95a95-89a3-41a2-b053-f4f88b513953",
