@@ -363,9 +363,30 @@
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on);
     });
+    $("#tab-home").hidden = name !== "home";
     $("#tab-novo").hidden = name !== "novo";
     $("#tab-acompanhar").hidden = name !== "acompanhar";
+    // Se a tela de "Pedido enviado" ainda estiver aberta, voltar pra Nova solicitação mostra o formulário limpo.
+    if (name === "novo" && !$("#sucesso").hidden) resetForm();
     if (name === "acompanhar") renderLista();
+    if (name === "home") loadTable().then(({ headers, rows }) => atualizarStats(headers, rows)).catch(() => {});
+    window.scrollTo({ top: 0 });
+  }
+
+  // Abre o formulário já com o tipo escolhido no atalho da tela inicial.
+  function abrirNovo(tipo) {
+    showTab("novo");
+    const primeiro = $(".item", itensEl);
+    const radio = primeiro && [...primeiro.querySelectorAll('input[type="radio"]')].find((r) => r.value === tipo);
+    if (radio) radio.click();
+  }
+
+  // "Pedidos em andamento" = tudo que ainda não está FINALIZADO.
+  function atualizarStats(headers, rows) {
+    const c = colIndex(headers);
+    if (c.status < 0) return;
+    const n = rows.filter((r) => r[c.empreendimento] && !String(r[c.status] ?? "").toUpperCase().includes("FINALIZ")).length;
+    $("#statAndamento").textContent = n;
   }
 
   // Pré-seleciona o solicitante pelo e-mail de login (ex: victor.martins@... → "Victor Martins"),
@@ -386,13 +407,15 @@
     const area = $("#userArea");
     if (DEMO) { area.innerHTML = `<span class="muted small">Demonstração</span>`; return; }
     area.innerHTML = `<span class="name"></span><button class="btn ghost small" id="logoutBtn">Sair</button>`;
-    $(".name", area).textContent = sessaoEmail || "";
+    const nome = guessSolicitante() || String(sessaoEmail || "").split("@")[0];
+    $(".name", area).textContent = nome ? `Olá, ${nome}` : "";
     $("#logoutBtn").addEventListener("click", sair);
   }
 
   function startApp() {
     $("#loginView").hidden = true;
     $("#appView").hidden = false;
+    document.body.classList.add("logado");
     renderUser();
 
     const sel = $("#solicitante");
@@ -406,7 +429,7 @@
     filtro.value = quem;
 
     addItem();
-    loadTable().then(({ headers, rows }) => fillSuggestions(headers, rows)).catch((err) => console.warn(err));
+    loadTable().then(({ headers, rows }) => { fillSuggestions(headers, rows); atualizarStats(headers, rows); }).catch((err) => console.warn(err));
 
     $("#addItem").addEventListener("click", () => $(".numero", addItem())?.closest(".item").scrollIntoView({ behavior: "smooth", block: "nearest" }));
     $("#pedidoForm").addEventListener("submit", onSubmit);
@@ -420,6 +443,13 @@
       setTimeout(() => ($("#copyBtn").textContent = "Copiar"), 1500);
     });
     document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
+    document.querySelectorAll("[data-novo]").forEach((b) => b.addEventListener("click", () => abrirNovo(b.dataset.novo)));
+    document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
+      // "Meus pedidos" filtra pelo solicitante escolhido; "Todos os pedidos" mostra tudo.
+      $("#filtroSolicitante").value = b.dataset.go === "meus" ? $("#solicitante").value : "";
+      showTab("acompanhar");
+    }));
+    $("#brandHome").addEventListener("click", (e) => { e.preventDefault(); showTab("home"); });
     $("#filtroSolicitante").addEventListener("change", () => renderLista());
     let debounce;
     $("#filtroBusca").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => renderLista(), 200); });
