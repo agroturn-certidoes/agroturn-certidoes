@@ -50,6 +50,22 @@ como referência — não um protocolo, já que ele ainda não existe nesse mome
 As colunas são encontradas **pelo nome do cabeçalho**, então mudar a ordem delas não quebra o site.
 Renomear uma coluna quebra.
 
+## Instalar como aplicativo (celular e computador)
+
+O site é um PWA: dá para instalar e abrir como um app, em tela cheia, com o ícone da Agroturn.
+
+- **Android (Chrome):** na tela inicial do site aparece "Instale o app" → **Instalar**. Ou menu ⋮ → *Instalar app*.
+- **iPhone (Safari):** botão **Compartilhar** → *Adicionar à Tela de Início*.
+- **Computador (Chrome/Edge):** ícone de instalar na barra de endereço.
+
+No celular, o menu vira uma barra de abas embaixo (Início · Novo pedido · Acompanhar) e o botão
+*Enviar pedido* fica sempre visível. O service worker (`sw.js`) guarda uma cópia das telas para abrir
+mesmo sem internet — mas pedidos e a lista de acompanhamento sempre vão ao vivo pra planilha, então
+sem internet o app abre e avisa que não conseguiu enviar/ler.
+
+Arquivos do app: `manifest.webmanifest`, `sw.js` e `assets/` (ícones). Se trocar a logomarca,
+gere de novo os ícones (192, 512 e o "maskable").
+
 ## Testar agora (modo demonstração)
 
 Com `apiBase` vazio em `config.js`, o site roda sem login e salva os pedidos só no navegador.

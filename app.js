@@ -303,13 +303,13 @@
   }
 
   // ---------- UI: acompanhar ----------
-  const STATUS_CLASS = [["TAXA", "taxa"], ["PAGAMENTO", "pagamento"], ["PEDIDO", "pedido"], ["FINALIZ", "finalizado"]];
+  const STATUS_CLASS = [["TAXA", "taxa"], ["PAGAMENTO", "pagamento"], ["PEDIDO", "st-pedido"], ["FINALIZ", "finalizado"]];
   const statusClass = (s) => (STATUS_CLASS.find(([k]) => String(s).toUpperCase().includes(k)) || [, ""])[1];
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
   async function renderLista(force = false) {
     const lista = $("#listaPedidos");
-    lista.innerHTML = `<div class="empty">Carregando…</div>`;
+    lista.innerHTML = `<div class="sk" aria-label="Carregando"></div><div class="sk"></div><div class="sk"></div>`;
     try {
       const { headers, rows } = await loadTable(force);
       fillSuggestions(headers, rows);
@@ -380,11 +380,13 @@
   }
 
   function showTab(name) {
-    document.querySelectorAll(".tab").forEach((t) => {
+    // Menu do cabeçalho (computador) e barra de baixo (celular) andam juntos.
+    document.querySelectorAll("[data-tab]").forEach((t) => {
       const on = t.dataset.tab === name;
       t.classList.toggle("active", on);
-      t.setAttribute("aria-selected", on);
+      if (on) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
     });
+    fecharMenuConta();
     $("#tab-home").hidden = name !== "home";
     $("#tab-novo").hidden = name !== "novo";
     $("#tab-acompanhar").hidden = name !== "acompanhar";
@@ -411,12 +413,76 @@
     $("#statAndamento").textContent = n;
   }
 
+  // Avatar com as iniciais; toque abre o menu da conta (nome, e-mail e Sair).
+  function iniciais(nome) {
+    const p = String(nome).trim().split(/\s+/).filter(Boolean);
+    return ((p[0]?.[0] || "?") + (p.length > 1 ? p[p.length - 1][0] : "")).toUpperCase();
+  }
+
+  function fecharMenuConta() {
+    $("#userMenu").hidden = true;
+    $("#avatarBtn").setAttribute("aria-expanded", "false");
+  }
+
   function renderUser() {
-    const area = $("#userArea");
-    if (DEMO) { area.innerHTML = `<span class="muted small">Demonstração</span>`; return; }
-    area.innerHTML = `<span class="name"></span><button class="btn ghost small" id="logoutBtn">Sair</button>`;
-    $(".name", area).textContent = `Olá, ${nomeSolicitante()}`;
+    const nome = nomeSolicitante();
+    $("#avatarBtn").textContent = iniciais(nome);
+    $("#umNome").textContent = nome;
+    $("#umEmail").textContent = DEMO ? "Modo demonstração" : sessaoEmail || "";
+    $("#logoutBtn").hidden = DEMO; // sem login não há o que sair
+    $("#avatarBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const abrir = $("#userMenu").hidden;
+      $("#userMenu").hidden = !abrir;
+      $("#avatarBtn").setAttribute("aria-expanded", String(abrir));
+    });
     $("#logoutBtn").addEventListener("click", sair);
+    document.addEventListener("click", (e) => { if (!e.target.closest("#userArea")) fecharMenuConta(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") fecharMenuConta(); });
+  }
+
+  // Aviso rápido no rodapé ("Copiado!" etc.)
+  let toastTimer;
+  function toast(msg) {
+    const t = $("#toast");
+    t.textContent = msg;
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (t.hidden = true), 2200);
+  }
+
+  // Instalar como app: Chrome/Android/computador oferecem um botão; no iPhone só existe o caminho manual.
+  let promptInstalar = null;
+  const jaInstalado = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+  const dispensouInstalar = () => { try { return localStorage.getItem("agroturn-instalar") === "nao"; } catch { return false; } };
+  function mostrarInstalar() {
+    if (jaInstalado() || dispensouInstalar()) return;
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    if (ios) {
+      $("#instalarDica").textContent = "Toque em Compartilhar e depois em “Adicionar à Tela de Início”.";
+      $("#instalarBtn").hidden = true;
+    } else if (!promptInstalar) return; // sem suporte: não mostra
+    $("#instalar").hidden = false;
+  }
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    promptInstalar = e;
+    if (!$("#appView").hidden) mostrarInstalar();
+  });
+  window.addEventListener("appinstalled", () => { promptInstalar = null; $("#instalar").hidden = true; });
+  function iniciarInstalar() {
+    $("#instalarBtn").addEventListener("click", async () => {
+      if (!promptInstalar) return;
+      promptInstalar.prompt();
+      await promptInstalar.userChoice.catch(() => {});
+      promptInstalar = null;
+      $("#instalar").hidden = true;
+    });
+    $("#instalarFechar").addEventListener("click", () => {
+      $("#instalar").hidden = true;
+      try { localStorage.setItem("agroturn-instalar", "nao"); } catch {}
+    });
+    mostrarInstalar();
   }
 
   function startApp() {
@@ -424,6 +490,7 @@
     $("#appView").hidden = false;
     document.body.classList.add("logado");
     renderUser();
+    iniciarInstalar();
 
     // O solicitante é quem entrou (não há mais o que escolher): fica fixo no formulário.
     const quem = nomeSolicitante();
@@ -447,10 +514,9 @@
     $("#novoPedido").addEventListener("click", resetForm);
     $("#verPedidos").addEventListener("click", () => { resetForm(); showTab("acompanhar"); });
     $("#copyBtn").addEventListener("click", async () => {
-      try { await navigator.clipboard.writeText($("#protocoloOut").textContent); $("#copyBtn").textContent = "Copiado!"; } catch {}
-      setTimeout(() => ($("#copyBtn").textContent = "Copiar"), 1500);
+      try { await navigator.clipboard.writeText($("#protocoloOut").textContent); toast("Número copiado"); } catch { toast("Não foi possível copiar"); }
     });
-    document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
+    document.querySelectorAll("[data-tab]").forEach((t) => t.addEventListener("click", () => showTab(t.dataset.tab)));
     document.querySelectorAll("[data-novo]").forEach((b) => b.addEventListener("click", () => abrirNovo(b.dataset.novo)));
     document.querySelectorAll("[data-go]").forEach((b) => b.addEventListener("click", () => {
       // "Meus pedidos" filtra pelo solicitante escolhido; "Todos os pedidos" mostra tudo.
@@ -520,4 +586,9 @@
       pedirLogin();
     }
   })();
+
+  // Registra o service worker (instalar como app + abrir sem internet). Só em https ou localhost.
+  if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
+    window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  }
 })();

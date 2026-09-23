@@ -2,9 +2,16 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Solicitação de Certidões · Agroturn</title>
-  <link rel="icon" type="image/png" href="assets/icone.png">
+  <meta name="theme-color" content="#ffffff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Certidões">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" href="assets/favicon-64.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -21,7 +28,14 @@
         <button type="button" class="tab" data-tab="novo">Nova solicitação</button>
         <button type="button" class="tab" data-tab="acompanhar">Acompanhar pedidos</button>
       </nav>
-      <div id="userArea" class="user-area"></div>
+      <div id="userArea" class="user-area">
+        <button type="button" id="avatarBtn" class="avatar" aria-haspopup="true" aria-expanded="false" aria-controls="userMenu" aria-label="Minha conta"></button>
+        <div id="userMenu" class="usermenu" hidden>
+          <div class="um-nome" id="umNome"></div>
+          <div class="um-mail" id="umEmail"></div>
+          <button type="button" id="logoutBtn" class="btn ghost small">Sair</button>
+        </div>
+      </div>
     </div>
   </header>
 
@@ -34,10 +48,10 @@
     <section id="loginView" class="card login" hidden>
       <h1>Entrar</h1>
       <p class="muted">Use seu e-mail da Agroturn para fazer ou acompanhar pedidos de matrícula, transcrição e cadeia dominial.</p>
-      <form id="loginForm">
+      <form id="loginForm" novalidate>
         <label class="field">
           <span>E-mail</span>
-          <input id="loginEmail" type="text" placeholder="seu.nome@agroturn.com.br" autocomplete="username" autocapitalize="off" spellcheck="false" required>
+          <input id="loginEmail" type="email" inputmode="email" placeholder="seu.nome@agroturn.com.br" autocomplete="username" autocapitalize="off" autocorrect="off" spellcheck="false" required>
         </label>
         <label class="field">
           <span>Senha</span>
@@ -62,6 +76,16 @@
             <span>Pedidos em andamento</span>
             <strong id="statAndamento">—</strong>
           </div>
+        </div>
+
+        <div id="instalar" class="install" hidden>
+          <span class="ico azul"><svg viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></svg></span>
+          <div class="install-txt">
+            <strong>Instale o app no seu celular</strong>
+            <span id="instalarDica">Acesso rápido, em tela cheia, direto da tela inicial.</span>
+          </div>
+          <button type="button" id="instalarBtn" class="btn primary small">Instalar</button>
+          <button type="button" id="instalarFechar" class="fechar" aria-label="Dispensar">×</button>
         </div>
 
         <h2 class="section-title">Faça um pedido</h2>
@@ -107,7 +131,7 @@
             </div>
             <label class="field">
               <span>Nome do empreendimento <em>*</em></span>
-              <input id="empreendimento" type="text" list="listaEmpreendimentos" placeholder="Ex: Fazenda Boa Ventura" required autocomplete="off">
+              <input id="empreendimento" type="text" list="listaEmpreendimentos" placeholder="Ex: Fazenda Boa Ventura" required autocomplete="off" enterkeyhint="next">
               <datalist id="listaEmpreendimentos"></datalist>
             </label>
           </div>
@@ -154,7 +178,7 @@
             </label>
             <label class="field inline grow">
               <span>Buscar</span>
-              <input id="filtroBusca" type="search" placeholder="Protocolo, empreendimento, nº ou cartório">
+              <input id="filtroBusca" type="search" enterkeyhint="search" placeholder="Empreendimento, nº ou cartório">
             </label>
             <button type="button" id="refreshBtn" class="btn ghost">Atualizar</button>
           </div>
@@ -164,6 +188,24 @@
       </div>
     </section>
   </main>
+
+  <!-- Barra de navegação do celular (no computador o menu fica no cabeçalho) -->
+  <nav class="tabbar" aria-label="Principal">
+    <button type="button" class="tb active" data-tab="home">
+      <svg viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>
+      <span>Início</span>
+    </button>
+    <button type="button" class="tb" data-tab="novo">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      <span>Novo pedido</span>
+    </button>
+    <button type="button" class="tb" data-tab="acompanhar">
+      <svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>
+      <span>Acompanhar</span>
+    </button>
+  </nav>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
   <template id="itemTpl">
     <fieldset class="item">
@@ -175,12 +217,12 @@
       <div class="grid-2">
         <label class="field">
           <span>Nº da Matrícula/Transcrição <em>*</em></span>
-          <input class="numero" type="text" placeholder="Ex: 12345;78456" required autocomplete="off">
+          <input class="numero" type="text" placeholder="Ex: 12345;78456" required autocomplete="off" autocapitalize="off" enterkeyhint="next">
           <small class="hint">Vários números? Separe com ponto e vírgula ( ; ).</small>
         </label>
         <label class="field">
           <span>Cartório responsável <em>*</em></span>
-          <input class="cartorio" type="text" list="listaCartorios" placeholder="Ex: 1º Ofício de Cuiabá-MT" required autocomplete="off">
+          <input class="cartorio" type="text" list="listaCartorios" placeholder="Ex: 1º Ofício de Cuiabá-MT" required autocomplete="off" enterkeyhint="next">
         </label>
       </div>
       <label class="field obs">
