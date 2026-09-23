@@ -472,6 +472,10 @@
     if (email) {
       sessaoEmail = email;
       startApp();
+      // Renova o login em segundo plano: enquanto a pessoa usar o site, ele nunca expira.
+      // Se falhar por falta de rede, segue com o login atual; se a API recusar (ex.: e-mail
+      // removido da lista), api() já derruba a sessão e volta pra tela de login.
+      api("/api/refresh", { method: "POST" }).then((d) => setStoredToken(d.token)).catch(() => {});
     } else {
       clearStoredToken();
       pedirLogin();

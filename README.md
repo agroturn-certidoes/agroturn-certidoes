@@ -27,7 +27,7 @@ cada pessoa faça login nela).
 - **Acompanhar pedidos**: lista os pedidos da planilha, agrupados por solicitante + empreendimento +
   data/hora do envio (não por Protocolo — ele é digitado depois e pode faltar ou ser diferente por linha).
   Mostra o status atualizado pelo Fundiário. Tem filtro por solicitante e busca.
-- Login fica salvo por 30 dias neste navegador — não pede toda vez.
+- Login fica salvo neste navegador por 1 ano e se renova sozinho a cada visita — só pede de novo em navegador/computador novo, aba anônima ou depois de limpar os dados do navegador.
 - Sugere empreendimentos e cartórios já usados na planilha (evita digitação diferente).
 
 Colunas gravadas em cada linha nova:

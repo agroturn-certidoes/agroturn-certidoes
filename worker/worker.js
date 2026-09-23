@@ -3,6 +3,7 @@
 //
 // Rotas:
 //   POST /api/login   { email, password } -> { token }
+//   POST /api/refresh  (Authorization: Bearer <token>) -> { token }   (renova o login)
 //   GET  /api/table    (Authorization: Bearer <token>) -> { headers, rows }
 //   POST /api/rows     (Authorization: Bearer <token>) { rows: [[...], ...] } -> { ok: true }
 
@@ -21,7 +22,9 @@ function json(data, status, env) {
 }
 
 // ---------- Token de sessão (HMAC, sem biblioteca) ----------
-const SESSAO_SEGUNDOS = 30 * 24 * 60 * 60; // 30 dias — evita pedir login toda hora
+// 1 ano, renovado a cada vez que a pessoa abre o site (/api/refresh) — na prática, quem usa o site
+// de vez em quando não vê mais a tela de login.
+const SESSAO_SEGUNDOS = 365 * 24 * 60 * 60;
 
 function b64url(bytes) {
   let bin = "";
@@ -133,8 +136,16 @@ async function exigirSessao(request, env) {
   const auth = request.headers.get("Authorization") || "";
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   const payload = await verificarToken(token, env);
-  if (!payload) throw new RespostaErro(401, "Sessão expirada. Entre de novo.");
+  // Confere a lista a cada uso: quem for removido de ALLOWED_EMAILS perde o acesso na hora.
+  if (!payload || !listaEmails(env).includes(payload.email)) {
+    throw new RespostaErro(401, "Sessão expirada. Entre de novo.");
+  }
   return payload;
+}
+
+async function handleRefresh(request, env) {
+  const { email } = await exigirSessao(request, env);
+  return json({ token: await assinarToken(email, env) }, 200, env);
 }
 
 class RespostaErro extends Error {
@@ -169,6 +180,7 @@ export default {
     const url = new URL(request.url);
     try {
       if (url.pathname === "/api/login" && request.method === "POST") return await handleLogin(request, env);
+      if (url.pathname === "/api/refresh" && request.method === "POST") return await handleRefresh(request, env);
       if (url.pathname === "/api/table" && request.method === "GET") return await handleTable(request, env);
       if (url.pathname === "/api/rows" && request.method === "POST") return await handleRows(request, env);
       return json({ error: "Não encontrado." }, 404, env);
