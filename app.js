@@ -1,9 +1,6 @@
 (() => {
   const CFG = window.APP_CONFIG;
-  const DEMO = !CFG.clientId;
-  const SCOPES = ["User.Read", "Files.ReadWrite.All"];
-  const GRAPH = "https://graph.microsoft.com/v1.0";
-  const WB = `/drives/${CFG.driveId}/items/${CFG.itemId}/workbook`;
+  const DEMO = !CFG.apiBase;
   const OBS_HINTS = {
     "Transcrição": "Informe folhas, livro e data da transcrição.",
     "Cadeia Dominial": "A cadeia é pedida até a origem. Se quiser até uma data específica, informe aqui.",
@@ -11,61 +8,61 @@
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-  // O e-mail é só a "porta de entrada" da tela: quem autentica de verdade é o Microsoft, com a
-  // mesma conta de sempre. Isso só evita que alguém tente entrar com conta pessoal por engano.
   const domEmail = norm(CFG.dominioEmail).replace(/^@/, "");
-  const contaValida = (email) => norm(email).endsWith("@" + domEmail);
 
-  let msal = null;
-  let account = null;
-  let tableName = CFG.tableName;
   let cache = null; // { headers: [], rows: [][] }
 
-  // ---------- Autenticação ----------
-  async function initAuth() {
-    msal = new window.msal.PublicClientApplication({
-      auth: {
-        clientId: CFG.clientId,
-        authority: `https://login.microsoftonline.com/${CFG.tenantId}`,
-        redirectUri: location.origin + location.pathname,
-      },
-      cache: { cacheLocation: "localStorage" },
-    });
-    await msal.initialize();
-    const res = await msal.handleRedirectPromise();
-    account = res?.account || msal.getAllAccounts()[0] || null;
-  }
+  // ---------- Sessão (a API confere e-mail + senha e devolve um token) ----------
+  const TOKEN_KEY = "agroturn-token";
+  const getStoredToken = () => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
+  const setStoredToken = (t) => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} };
+  const clearStoredToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch {} };
 
-  async function getToken() {
+  // Só lê o e-mail de dentro do token pra mostrar na tela — quem confere de verdade é a API.
+  function emailDoToken(token) {
     try {
-      return (await msal.acquireTokenSilent({ scopes: SCOPES, account })).accessToken;
-    } catch (e) {
-      await msal.acquireTokenRedirect({ scopes: SCOPES, account });
-      throw e;
+      const payload = JSON.parse(atob(token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")));
+      if (payload.exp < Date.now() / 1000) return null;
+      return payload.email;
+    } catch {
+      return null;
     }
   }
 
-  async function graph(path, options = {}) {
-    const token = await getToken();
-    const res = await fetch(GRAPH + path, {
+  let sessaoEmail = null;
+
+  async function fazerLogin(email, senha) {
+    const res = await fetch(`${CFG.apiBase}/api/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password: senha }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Não foi possível entrar.");
+    setStoredToken(data.token);
+    sessaoEmail = email;
+  }
+
+  function sair() {
+    clearStoredToken();
+    location.reload();
+  }
+
+  // ---------- Acesso à planilha (via API própria) ----------
+  async function api(path, options = {}) {
+    const token = getStoredToken();
+    const res = await fetch(`${CFG.apiBase}${path}`, {
       ...options,
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", ...options.headers },
     });
-    if (!res.ok) {
-      let msg = `${res.status} ${res.statusText}`;
-      try { msg = (await res.json()).error?.message || msg; } catch {}
-      throw new Error(msg);
+    if (res.status === 401) {
+      clearStoredToken();
+      location.reload();
+      throw new Error("Sessão expirada.");
     }
-    return res.status === 204 ? null : res.json();
-  }
-
-  // ---------- Acesso à planilha ----------
-  async function resolveTable() {
-    if (tableName) return tableName;
-    const ws = encodeURIComponent(CFG.worksheet.replace(/'/g, "''"));
-    const { value } = await graph(`${WB}/worksheets('${ws}')/tables?$select=name`);
-    if (!value.length) throw new Error(`Nenhuma tabela encontrada na aba "${CFG.worksheet}".`);
-    return (tableName = value[0].name);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `${res.status}`);
+    return data;
   }
 
   async function loadTable(force = false) {
@@ -75,9 +72,7 @@
       cache = { headers: DEMO_HEADERS, rows: saved };
       return cache;
     }
-    const t = encodeURIComponent(await resolveTable());
-    const { values } = await graph(`${WB}/tables('${t}')/range?$select=values`);
-    cache = { headers: values[0].map(String), rows: values.slice(1) };
+    cache = await api("/api/table");
     return cache;
   }
 
@@ -86,11 +81,7 @@
       writeDemo([...readDemo(), ...rows]);
       return;
     }
-    const t = encodeURIComponent(await resolveTable());
-    await graph(`${WB}/tables('${t}')/rows/add`, {
-      method: "POST",
-      body: JSON.stringify({ index: null, values: rows }),
-    });
+    await api("/api/rows", { method: "POST", body: JSON.stringify({ rows }) });
   }
 
   // Modo demonstração: mesmas colunas da planilha, salvo no navegador.
@@ -377,15 +368,15 @@
     if (name === "acompanhar") renderLista();
   }
 
-  // Pré-seleciona o solicitante pelo nome da conta Microsoft (ou pela última escolha).
+  // Pré-seleciona o solicitante pelo e-mail de login (ex: victor.martins@... → "Victor Martins"),
+  // ou pela última escolha salva neste navegador.
   function guessSolicitante() {
     let last = null;
     try { last = localStorage.getItem("agroturn-solicitante"); } catch {}
     if (last && CFG.solicitantes.includes(last)) return last;
-    const nome = norm(account?.name);
-    if (!nome) return "";
-    const palavras = nome.split(/\s+/);
-    // "Victor Martins Silva" → "Victor Martins"; "Keli Souza" → "Keli" (só se o primeiro nome for único na lista)
+    const local = norm(sessaoEmail).split("@")[0];
+    if (!local) return "";
+    const palavras = local.split(/[._-]+/).filter(Boolean);
     const completo = CFG.solicitantes.filter((s) => norm(s).split(" ").every((w) => palavras.includes(w)));
     const candidatos = completo.length ? completo : CFG.solicitantes.filter((s) => norm(s).split(" ")[0] === palavras[0]);
     return candidatos.length === 1 ? candidatos[0] : "";
@@ -394,10 +385,9 @@
   function renderUser() {
     const area = $("#userArea");
     if (DEMO) { area.innerHTML = `<span class="muted small">Demonstração</span>`; return; }
-    if (!account) { area.innerHTML = ""; return; }
     area.innerHTML = `<span class="name"></span><button class="btn ghost small" id="logoutBtn">Sair</button>`;
-    $(".name", area).textContent = account.name || account.username;
-    $("#logoutBtn").addEventListener("click", () => msal.logoutRedirect({ account }));
+    $(".name", area).textContent = sessaoEmail || "";
+    $("#logoutBtn").addEventListener("click", sair);
   }
 
   function startApp() {
@@ -440,25 +430,33 @@
     $("#loginView").hidden = false;
     $("#loginError").hidden = !erro;
     if (erro) $("#loginError").textContent = erro;
-    $("#loginForm").addEventListener("submit", (e) => {
+    const limpar = () => { $("#loginEmail").classList.remove("invalid"); $("#loginSenha").classList.remove("invalid"); $("#loginError").hidden = true; };
+    $("#loginEmail").addEventListener("input", limpar);
+    $("#loginSenha").addEventListener("input", limpar);
+    $("#loginForm").addEventListener("submit", async (e) => {
       e.preventDefault();
       const email = norm($("#loginEmail").value);
-      if (!contaValida(email)) {
-        $("#loginError").textContent = `Use seu e-mail @${domEmail} (o mesmo do Office/SharePoint da Agroturn).`;
+      const senha = $("#loginSenha").value;
+      if (!email.endsWith("@" + domEmail)) {
+        $("#loginError").textContent = `Use seu e-mail @${domEmail}.`;
         $("#loginError").hidden = false;
         $("#loginEmail").classList.add("invalid");
         return;
       }
-      // Sem loginHint nem domain_hint: como agroturn.com.br não é um domínio verificado no
-      // Microsoft 365 da empresa, qualquer dica com esse domínio faz a Microsoft mandar a pessoa
-      // pro login de conta pessoal (live.com) em vez do login da empresa. O campo de e-mail aqui
-      // só confirma que é alguém da Agroturn antes de abrir o login — quem autentica de verdade
-      // é a tela seguinte, já fixada no tenant certo (CFG.tenantId).
-      msal.loginRedirect({ scopes: SCOPES });
-    });
-    $("#loginEmail").addEventListener("input", () => {
-      $("#loginEmail").classList.remove("invalid");
-      $("#loginError").hidden = true;
+      const btn = $("#loginBtn");
+      btn.disabled = true;
+      btn.textContent = "Entrando…";
+      try {
+        await fazerLogin(email, senha);
+        startApp();
+      } catch (err) {
+        $("#loginError").textContent = err.message;
+        $("#loginError").hidden = false;
+        $("#loginSenha").classList.add("invalid");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Entrar";
+      }
     });
   }
 
@@ -469,22 +467,13 @@
       startApp();
       return;
     }
-    try {
-      await initAuth();
-    } catch (err) {
-      console.error(err);
-      pedirLogin(`Erro ao iniciar o login: ${err.message}`);
-      return;
-    }
-    if (account && !contaValida(account.username)) {
-      // Conta certa (é do tenant Agroturn, senão o login nem chegaria aqui), mas com e-mail
-      // fora do domínio esperado — sai e pede pra entrar de novo com o e-mail @agroturn.com.
-      await msal.logoutRedirect({ account, postLogoutRedirectUri: location.origin + location.pathname });
-      return;
-    }
-    if (account) {
+    const token = getStoredToken();
+    const email = token && emailDoToken(token);
+    if (email) {
+      sessaoEmail = email;
       startApp();
     } else {
+      clearStoredToken();
       pedirLogin();
     }
   })();

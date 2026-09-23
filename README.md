@@ -5,6 +5,21 @@ Cada pedido vira uma ou mais linhas na planilha **Controle de Certidões - RI Di
 (aba *Controle de Certidão*) no SharePoint. O Setor Fundiário continua trabalhando na planilha
 normalmente (Responsável, Status, Recibo).
 
+## Como é montado
+
+Duas partes, publicadas em lugares diferentes:
+
+- **Site** (`index.html`, `styles.css`, `app.js`, `config.js`) — só HTML/JS, hospedado no GitHub Pages.
+  Quem acessa nunca vê nem toca na credencial da planilha.
+- **API** (`worker/`) — um Cloudflare Worker (gratuito) que confere e-mail + senha e, se estiver certo,
+  lê/grava na planilha usando uma credencial própria da Microsoft (não é a conta de ninguém — é só do
+  robô). É a única peça que guarda segredos.
+
+O login **não** é mais pela Microsoft: é e-mail (`@agroturn.com.br`) + uma senha da empresa, conferidos
+pela API. Isso evita levar todo mundo pra tela de login da Microsoft — mas por trás, quem escreve na
+planilha continua sendo uma aplicação Microsoft registrada (é preciso registrá-la, só que sem exigir que
+cada pessoa faça login nela).
+
 ## O que o site faz
 
 - **Nova solicitação**: solicitante, empreendimento e uma ou mais certidões no mesmo pedido.
@@ -12,7 +27,7 @@ normalmente (Responsável, Status, Recibo).
 - **Acompanhar pedidos**: lista os pedidos da planilha, agrupados por solicitante + empreendimento +
   data/hora do envio (não por Protocolo — ele é digitado depois e pode faltar ou ser diferente por linha).
   Mostra o status atualizado pelo Fundiário. Tem filtro por solicitante e busca.
-- Login com a conta Microsoft da empresa. O solicitante é pré-selecionado pelo nome da conta.
+- Login fica salvo por 30 dias neste navegador — não pede toda vez.
 - Sugere empreendimentos e cartórios já usados na planilha (evita digitação diferente).
 
 Colunas gravadas em cada linha nova:
@@ -35,7 +50,7 @@ Renomear uma coluna quebra.
 
 ## Testar agora (modo demonstração)
 
-Com `clientId` vazio em `config.js`, o site roda sem login e salva os pedidos só no navegador.
+Com `apiBase` vazio em `config.js`, o site roda sem login e salva os pedidos só no navegador.
 
 ```bash
 node serve.js
@@ -43,62 +58,78 @@ node serve.js
 
 Abra http://localhost:5500
 
-## Ligar na planilha (uma vez, precisa de um administrador do Microsoft 365)
+## Colocar no ar de verdade
 
-### 1. Publicar no GitHub Pages (fazer antes — dá o endereço que entra no passo 2)
+### 1. Publicar o site no GitHub Pages
 
 1. Crie uma conta em https://github.com (gratuita, sem cartão) se ainda não tiver.
-2. **New repository**: nome `agroturn-certidoes`, marcado como **Public** (sem README, sem .gitignore —
-   já vêm do projeto). **Create repository**.
-3. Copie a URL do repositório que o GitHub mostrar (ex. `https://github.com/SEU-USUARIO/agroturn-certidoes.git`)
-   e rode, no terminal, dentro da pasta do projeto:
+2. **New repository**: nome `agroturn-certidoes`, **Public**. **Create repository**.
+3. No terminal, dentro da pasta do projeto:
    ```bash
    git remote add origin https://github.com/SEU-USUARIO/agroturn-certidoes.git
-   git commit -m "Site de solicitação de certidões"
    git push -u origin main
    ```
-   No primeiro `push`, o Git abre o navegador para você entrar com sua conta do GitHub — é o próprio GitHub
-   pedindo login, não estou vendo nem guardando essa senha.
-4. No repositório, vá em **Settings → Pages**. Em **Source**, escolha **Deploy from a branch**, branch
-   **main**, pasta **/ (root)** → **Save**.
-5. Espere ~1 minuto e recarregue a página. O endereço fixo do site aparece ali:
+   No primeiro `push`, o Git abre o navegador pra você entrar com sua conta do GitHub.
+4. No repositório, **Settings → Pages** → **Source: Deploy from a branch**, branch **main**, pasta
+   **/ (root)** → **Save**.
+5. Espere ~1 minuto: o link fixo do site aparece ali, algo como
    `https://SEU-USUARIO.github.io/agroturn-certidoes/`.
-6. Sempre que eu atualizar os arquivos do site, você só precisa rodar `git add -A && git commit -m "..." && git push`
-   de novo — o GitHub Pages publica sozinho em ~1 minuto.
+6. Sempre que os arquivos mudarem: `git add -A && git commit -m "..." && git push`.
 
-O repositório fica público, mas nada nele é secreto: `clientId` não é uma senha (é um identificador de app
-público, protegido por login), e o acesso real à planilha continua exigindo login Microsoft de alguém com
-permissão nela.
+### 2. Dar à aplicação uma credencial própria (sem depender do login de ninguém)
 
-### 2. Registrar o aplicativo no Microsoft Entra ID
+Isso usa o **mesmo registro de aplicativo** já criado no Entra ID (`Certidões Agroturn`), só que com um
+tipo de permissão diferente — de "em nome de quem está logado" para "em nome do próprio aplicativo".
 
-1. Acesse https://entra.microsoft.com → **Identidade → Aplicativos → Registros de aplicativo → Novo registro**.
-2. Nome: `Certidões Agroturn`. Tipos de conta: **Somente contas deste diretório organizacional**.
-3. URI de redirecionamento: plataforma **Aplicativo de página única (SPA)**, com o endereço do passo 1.5
-   (ex.: `https://SEU-USUARIO.github.io/agroturn-certidoes/`). Adicione também `http://localhost:5500/` para testes.
-4. Clique em **Registrar** e copie o **ID do aplicativo (cliente)** — pode me enviar, não é secreto.
+1. https://entra.microsoft.com → **Identidade → Aplicativos → Registros de aplicativo → Certidões Agroturn**
+2. **Certificados e segredos → Novo segredo do cliente** → dê um nome (ex. "API") e prazo de expiração
+   (ex. 24 meses) → **Adicionar**. Copie o **valor** do segredo agora — ele só aparece uma vez.
+   **Não me envie esse valor.** Ele vai direto pro Cloudflare (passo 3), nunca pro código do site.
+3. **Permissões de API → Adicionar uma permissão → Microsoft Graph → Permissões de aplicativo**
+   (não "delegadas" desta vez) → busque `Files.ReadWrite.All` → **Adicionar permissões**.
+4. **Conceder consentimento do administrador para Agroturn** → confirme.
 
-### 3. Permissões
+> Isso dá ao aplicativo acesso amplo a arquivos do SharePoint da empresa (não só a essa planilha). Para
+> uma empresa desse tamanho é um risco aceitável, mas se um dia quiser reduzir esse acesso só à pasta da
+> planilha, me avise — dá pra trocar por uma permissão mais estreita (`Sites.Selected`), só dá mais um
+> passo de configuração.
 
-Em **Permissões de API → Adicionar permissão → Microsoft Graph → Permissões delegadas**, adicione:
+### 3. Publicar a API no Cloudflare Worker
 
-- `User.Read`
-- `Files.ReadWrite.All`
+1. Crie uma conta gratuita em https://dash.cloudflare.com/sign-up (sem cartão).
+2. No computador, instale a ferramenta de linha de comando (uma vez):
+   ```bash
+   npm install -g wrangler
+   ```
+3. Entre com sua conta (abre o navegador):
+   ```bash
+   wrangler login
+   ```
+4. Dentro da pasta `worker/`, cadastre os segredos — cada comando vai perguntar o valor e
+   **você digita direto no terminal**, eu nunca vejo:
+   ```bash
+   cd C:\Users\Agrot\Projetos\agroturn-certidoes\worker
+   wrangler secret put GRAPH_CLIENT_SECRET
+   wrangler secret put SHARED_PASSWORD
+   wrangler secret put SESSION_SECRET
+   wrangler secret put ALLOWED_EMAILS
+   ```
+   - `GRAPH_CLIENT_SECRET`: o valor copiado no passo 2.2.
+   - `SHARED_PASSWORD`: a senha única que todo mundo vai usar pra entrar no site.
+   - `SESSION_SECRET`: qualquer texto longo e aleatório (só para assinar o login) — pode gerar um com
+     `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
+   - `ALLOWED_EMAILS`: a lista de e-mails autorizados, separados por vírgula, ex.
+     `victor.martins@agroturn.com.br,keli@agroturn.com.br,...`.
+5. Publique:
+   ```bash
+   wrangler deploy
+   ```
+   O terminal mostra a URL da API, algo como `https://agroturn-certidoes-api.SEU-USUARIO.workers.dev`.
+6. **Me manda essa URL** — não é secreta. Eu coloco em `config.js` (`apiBase`) e publico.
+7. Sempre que quiser trocar a senha, adicionar/remover alguém da lista, ou trocar a chave: repita o
+   `wrangler secret put ...` correspondente e depois `wrangler deploy` de novo.
 
-Depois clique em **Conceder consentimento do administrador para Agroturn**, para que ninguém veja
-tela de autorização.
-
-### 4. Configurar o site
-
-Em `config.js`, cole o ID em `clientId`. Os outros valores (tenant, arquivo, aba) já estão preenchidos.
-Depois, `git add -A && git commit -m "clientId" && git push` para publicar essa mudança no GitHub Pages.
-
-### 5. Acesso à planilha
-
-O site grava **em nome de quem está logado**. Por isso, todos os solicitantes precisam ter permissão de
-**edição** no arquivo da planilha (hoje já é assim se o pessoal abre o arquivo pelo site Agroturn).
-
-### 6. Aposentar o Forms
+### 4. Aposentar o Forms
 
 Depois de testar, **desative o recebimento de respostas** no Forms, mas não exclua o formulário.
 A tabela da planilha (`OfficeForms.Table…`) foi criada pelo Forms. Desativar evita duas portas de
@@ -110,14 +141,29 @@ entrada, e não excluir preserva o vínculo com o histórico.
 - `statusInicial`: status das linhas novas.
 - `separarNumeros`: `false` para gravar `12345;78456` numa linha só.
 - `tiposCertidao`: tipos disponíveis.
-- `dominioEmail`: domínio exigido na tela de login (ex. `agroturn.com.br`). A tela pede o e-mail nesse
-  formato em vez do botão genérico do Microsoft — mas quem autentica de verdade continua sendo o
-  Microsoft, com a mesma conta de sempre. Não é uma senha nova nem um sistema de login separado.
+- `dominioEmail`: domínio mostrado/validado na tela de login (ex. `agroturn.com.br`). Quem realmente
+  autoriza é a lista `ALLOWED_EMAILS` configurada no Worker (passo 3.4) — trocar aqui sem trocar lá não
+  dá acesso a ninguém novo.
 
-## Alternativa de hospedagem: Azure Static Web Apps
+## Ajustes comuns (API, em `worker/`)
+
+- Trocar a senha da empresa: `wrangler secret put SHARED_PASSWORD` de novo, depois `wrangler deploy`.
+- Adicionar/remover alguém: `wrangler secret put ALLOWED_EMAILS` de novo (lista inteira, separada por
+  vírgula), depois `wrangler deploy`.
+- Essas trocas não pedem alteração no site — só no Worker.
+
+## Segurança: o que essa senha compartilhada protege (e o que não protege)
+
+Todo mundo usa a mesma senha. Isso é simples de manter, mas quer dizer que **qualquer pessoa com a senha
+consegue enviar pedidos em nome de qualquer e-mail da lista** — não há como confirmar que foi realmente o
+dono daquele e-mail. Para o uso interno de hoje (equipe pequena, de confiança) é um risco aceitável. Se um
+dia isso incomodar, dá pra trocar por senha individual por pessoa, ou por um link de acesso enviado por
+e-mail — me avise.
+
+## Alternativa de hospedagem do site: Azure Static Web Apps
 
 Se um dia a Agroturn tiver assinatura Azure (ou quiser um domínio próprio tipo `certidoes.agroturn.com.br`
-sem depender do GitHub), dá para trocar de hospedagem sem mudar o resto do site:
+sem depender do GitHub), dá para trocar a hospedagem do **site** sem mudar a API:
 
 1. https://portal.azure.com → **Criar um recurso → Static Web App**.
 2. Nome: `agroturn-certidoes`. Plano: **Free**. Em **Detalhes da implantação**, **Origem: Outro**.
@@ -128,4 +174,5 @@ sem depender do GitHub), dá para trocar de hospedagem sem mudar o resto do site
    ```bash
    swa deploy "C:\Users\Agrot\Projetos\agroturn-certidoes" --deployment-token COLE_O_TOKEN_AQUI --env production
    ```
-7. Adicione essa URL como URI de redirecionamento no Entra ID (além da do GitHub Pages, ou no lugar dela).
+7. Atualize `ALLOWED_ORIGIN` em `worker/wrangler.toml` pra essa nova URL e rode `wrangler deploy` de novo
+   (senão a API bloqueia os pedidos vindos desse endereço, por segurança).

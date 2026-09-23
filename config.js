@@ -1,25 +1,13 @@
 // Configuração do site de Solicitação de Certidões — Agroturn
 // Edite apenas este arquivo para ajustar o comportamento do site.
 window.APP_CONFIG = {
-  // ID do aplicativo (client) registrado no Microsoft Entra ID.
-  // Deixe vazio ("") para rodar em MODO DEMONSTRAÇÃO (salva só no navegador, não grava na planilha).
-  clientId: "22472c6d-12aa-4cd4-a27c-d096a26ada92",
+  // Endereço da API (worker/) que fala com a planilha.
+  // Deixe vazio ("") para rodar em MODO DEMONSTRAÇÃO (salva só no navegador).
+  apiBase: "",
 
-  // Locatário (tenant) Microsoft 365 da Agroturn.
-  tenantId: "dab95a95-89a3-41a2-b053-f4f88b513953",
-
-  // Domínio de e-mail da empresa. A tela de login pede o e-mail nesse formato
-  // (ex: "nome@agroturn.com.br") em vez do botão genérico "Entrar com Microsoft".
-  // A conta continua sendo a mesma do Microsoft 365 — isso só muda a aparência da tela.
+  // Domínio de e-mail da empresa — só decide o texto de aviso na tela de login.
+  // Quem realmente autoriza é a lista de e-mails configurada na API (worker/wrangler.toml + secret).
   dominioEmail: "agroturn.com.br",
-
-  // Arquivo "Controle de Certidões - RI Ditigital.xlsx" no SharePoint (site Agroturn).
-  driveId: "b!x18PLiznRkepMx7QItAI0M_XmqvkJp1MnIWn2uOO-UCJGnZo60jYR7phsMb5tPGD",
-  itemId: "01UQHUCRED3ZSZMLLY6RFLN222BYAHTHRL",
-
-  // Aba e tabela onde as linhas são adicionadas.
-  worksheet: "Controle de Certidão",
-  tableName: "", // vazio = usa a primeira tabela da aba acima
 
   // Valor gravado na coluna "Status" de cada novo pedido.
   // Como o pedido acabou de chegar (o Fundiário ainda não solicitou no RI Digital),
