@@ -3,7 +3,7 @@
 window.APP_CONFIG = {
   // Endereço da API (worker/) que fala com a planilha.
   // Deixe vazio ("") para rodar em MODO DEMONSTRAÇÃO (salva só no navegador).
-  apiBase: "",
+  apiBase: "https://agroturn-certidoes-api.agroturn-certidoes.workers.dev",
 
   // Domínio de e-mail da empresa — só decide o texto de aviso na tela de login.
   // Quem realmente autoriza é a lista de e-mails configurada na API (worker/wrangler.toml + secret).
