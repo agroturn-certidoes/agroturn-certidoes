@@ -449,7 +449,12 @@
         $("#loginEmail").classList.add("invalid");
         return;
       }
-      msal.loginRedirect({ scopes: SCOPES, loginHint: email, extraQueryParameters: { domain_hint: domEmail } });
+      // Sem loginHint nem domain_hint: como agroturn.com.br não é um domínio verificado no
+      // Microsoft 365 da empresa, qualquer dica com esse domínio faz a Microsoft mandar a pessoa
+      // pro login de conta pessoal (live.com) em vez do login da empresa. O campo de e-mail aqui
+      // só confirma que é alguém da Agroturn antes de abrir o login — quem autentica de verdade
+      // é a tela seguinte, já fixada no tenant certo (CFG.tenantId).
+      msal.loginRedirect({ scopes: SCOPES });
     });
     $("#loginEmail").addEventListener("input", () => {
       $("#loginEmail").classList.remove("invalid");
