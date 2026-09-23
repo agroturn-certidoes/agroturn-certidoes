@@ -126,6 +126,11 @@ input::placeholder, textarea::placeholder { color: #98a1b8; }
 input:focus, select:focus, textarea:focus, .seg label:focus-within {
   outline: 2px solid var(--primary); outline-offset: 1px; border-color: var(--primary);
 }
+/* Campo só de leitura (ex.: Solicitante, preenchido pelo e-mail de login) */
+.fixo {
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px;
+  color: var(--heading); font-weight: 600; min-height: 41px;
+}
 .invalid { border-color: var(--danger) !important; }
 textarea { resize: vertical; }
 

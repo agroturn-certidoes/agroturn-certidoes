@@ -42,8 +42,8 @@ async function hmacKey(secret) {
     "verify",
   ]);
 }
-async function assinarToken(email, env) {
-  const payload = JSON.stringify({ email, exp: Math.floor(Date.now() / 1000) + SESSAO_SEGUNDOS });
+async function assinarToken(email, nome, env) {
+  const payload = JSON.stringify({ email, nome, exp: Math.floor(Date.now() / 1000) + SESSAO_SEGUNDOS });
   const payloadB64 = b64url(new TextEncoder().encode(payload));
   const key = await hmacKey(env.SESSION_SECRET);
   const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payloadB64));
@@ -70,11 +70,31 @@ async function verificarToken(token, env) {
   }
 }
 
+// Nome de quem pediu, tirado do e-mail: "victor.martins@..." -> "Victor Martins".
+// (O site ainda acerta acentos comparando com a lista de nomes conhecidos.)
+function nomeDoEmail(email) {
+  const local = String(email).split("@")[0];
+  return local
+    .split(/[._-]+/)
+    .map((p) => p.replace(/\d+/g, ""))
+    .filter(Boolean)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(" ");
+}
+
+// ALLOWED_EMAILS: e-mails separados por vírgula. Cada item pode ser só o e-mail
+// ("victor.martins@agroturn.com.br") ou "e-mail=Nome" ("victor@agroturn.com.br=Victor Martins")
+// quando o e-mail sozinho não dá o nome certo.
 function listaEmails(env) {
   return String(env.ALLOWED_EMAILS || "")
     .split(",")
-    .map((e) => e.trim().toLowerCase())
-    .filter(Boolean);
+    .map((item) => {
+      const i = item.indexOf("=");
+      const email = (i < 0 ? item : item.slice(0, i)).trim().toLowerCase();
+      const nomeExplicito = i < 0 ? "" : item.slice(i + 1).trim();
+      return { email, nome: nomeExplicito || nomeDoEmail(email) };
+    })
+    .filter((e) => e.email);
 }
 
 // ---------- Graph (aplicativo, sem usuário logado) ----------
@@ -125,11 +145,11 @@ async function resolveTable(env) {
 async function handleLogin(request, env) {
   const { email, password } = await request.json().catch(() => ({}));
   const emailNorm = String(email || "").trim().toLowerCase();
-  const emails = listaEmails(env);
-  if (password !== env.SHARED_PASSWORD || !emails.includes(emailNorm)) {
+  const autorizado = listaEmails(env).find((e) => e.email === emailNorm);
+  if (password !== env.SHARED_PASSWORD || !autorizado) {
     return json({ error: "E-mail ou senha incorretos." }, 401, env);
   }
-  return json({ token: await assinarToken(emailNorm, env) }, 200, env);
+  return json({ token: await assinarToken(autorizado.email, autorizado.nome, env), nome: autorizado.nome }, 200, env);
 }
 
 async function exigirSessao(request, env) {
@@ -137,15 +157,14 @@ async function exigirSessao(request, env) {
   const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   const payload = await verificarToken(token, env);
   // Confere a lista a cada uso: quem for removido de ALLOWED_EMAILS perde o acesso na hora.
-  if (!payload || !listaEmails(env).includes(payload.email)) {
-    throw new RespostaErro(401, "Sessão expirada. Entre de novo.");
-  }
-  return payload;
+  const autorizado = payload && listaEmails(env).find((e) => e.email === payload.email);
+  if (!autorizado) throw new RespostaErro(401, "Sessão expirada. Entre de novo.");
+  return autorizado; // { email, nome } atuais da lista
 }
 
 async function handleRefresh(request, env) {
-  const { email } = await exigirSessao(request, env);
-  return json({ token: await assinarToken(email, env) }, 200, env);
+  const { email, nome } = await exigirSessao(request, env);
+  return json({ token: await assinarToken(email, nome, env), nome }, 200, env);
 }
 
 class RespostaErro extends Error {

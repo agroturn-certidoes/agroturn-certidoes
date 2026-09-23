@@ -100,12 +100,11 @@
           <p class="muted">O pedido vai direto para a planilha do Setor Fundiário, que cuida da taxa, do boleto e do envio da certidão.</p>
 
           <div class="grid-2">
-            <label class="field">
-              <span>Solicitante <em>*</em></span>
-              <select id="solicitante" required>
-                <option value="">Selecione seu nome</option>
-              </select>
-            </label>
+            <div class="field">
+              <span>Solicitante</span>
+              <div class="fixo" id="solicitanteNome" aria-live="polite"></div>
+              <input type="hidden" id="solicitante">
+            </div>
             <label class="field">
               <span>Nome do empreendimento <em>*</em></span>
               <input id="empreendimento" type="text" list="listaEmpreendimentos" placeholder="Ex: Fazenda Boa Ventura" required autocomplete="off">

@@ -27,6 +27,7 @@ cada pessoa faça login nela).
 - **Acompanhar pedidos**: lista os pedidos da planilha, agrupados por solicitante + empreendimento +
   data/hora do envio (não por Protocolo — ele é digitado depois e pode faltar ou ser diferente por linha).
   Mostra o status atualizado pelo Fundiário. Tem filtro por solicitante e busca.
+- **Solicitante automático**: vem do e-mail de login. `victor.martins@…` vira "Victor Martins"; o site acerta acentos e grafia pela lista `solicitantes` do `config.js` (`maisa@…` vira "Maísa", `keli.souza@…` vira "Keli", igual ao que já está na planilha). Se o e-mail não der o nome certo (ex.: `victor@…`, quando há dois Victors), escreva o nome na lista da API — veja `ALLOWED_EMAILS` abaixo.
 - Login fica salvo neste navegador por 1 ano e se renova sozinho a cada visita — só pede de novo em navegador/computador novo, aba anônima ou depois de limpar os dados do navegador.
 - Sugere empreendimentos e cartórios já usados na planilha (evita digitação diferente).
 
@@ -37,7 +38,8 @@ Colunas gravadas em cada linha nova:
 | Id | maior Id da tabela + 1 |
 | Protocolo | **em branco** — é o número do RI Digital (ONR); o Fundiário digita na planilha depois de solicitar lá |
 | Data | data e hora do envio (fuso de Cuiabá) |
-| Solicitante, Nome do empreendimento, Tipo de Certidão, Nº da Matrícula/Transcrição, Observações, Cartório Responsável | preenchidos no site |
+| Solicitante | o nome de quem entrou, tirado do e-mail de login (não há mais o que escolher) |
+| Nome do empreendimento, Tipo de Certidão, Nº da Matrícula/Transcrição, Observações, Cartório Responsável | preenchidos no site |
 | Responsável | vazio (o Fundiário preenche com quem for solicitar no RI Digital) |
 | Status | `AGUARDANDO PEDIDO` (ajustável em `config.js` — troque se o fluxo de vocês usar outro valor inicial) |
 | Recibo | desmarcado |
@@ -119,7 +121,8 @@ tipo de permissão diferente — de "em nome de quem está logado" para "em nome
    - `SESSION_SECRET`: qualquer texto longo e aleatório (só para assinar o login) — pode gerar um com
      `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`.
    - `ALLOWED_EMAILS`: a lista de e-mails autorizados, separados por vírgula, ex.
-     `victor.martins@agroturn.com.br,keli@agroturn.com.br,...`.
+     `victor.martins@agroturn.com.br,keli@agroturn.com.br,...`. Quando o e-mail sozinho não dá o nome certo,
+     escreva `e-mail=Nome`, ex. `victor@agroturn.com.br=Victor Gonçalves,maisa@agroturn.com.br=Maísa`.
 5. Publique:
    ```bash
    wrangler deploy
@@ -137,7 +140,7 @@ entrada, e não excluir preserva o vínculo com o histórico.
 
 ## Ajustes comuns (`config.js`)
 
-- `solicitantes`: lista de nomes (entrou ou saiu alguém).
+- `solicitantes`: nomes conhecidos, com a grafia da planilha. Servem para acertar acentos do nome tirado do e-mail e para o filtro de "Acompanhar pedidos". Quem não estiver na lista continua conseguindo pedir (o nome sai do e-mail).
 - `statusInicial`: status das linhas novas.
 - `separarNumeros`: `false` para gravar `12345;78456` numa linha só.
 - `tiposCertidao`: tipos disponíveis.

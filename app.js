@@ -18,18 +18,20 @@
   const setStoredToken = (t) => { try { localStorage.setItem(TOKEN_KEY, t); } catch {} };
   const clearStoredToken = () => { try { localStorage.removeItem(TOKEN_KEY); } catch {} };
 
-  // Só lê o e-mail de dentro do token pra mostrar na tela — quem confere de verdade é a API.
-  function emailDoToken(token) {
+  // Só lê e-mail e nome de dentro do token pra mostrar na tela — quem confere de verdade é a API.
+  function dadosDoToken(token) {
     try {
-      const payload = JSON.parse(atob(token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")));
+      const bytes = Uint8Array.from(atob(token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+      const payload = JSON.parse(new TextDecoder().decode(bytes)); // UTF-8: nomes com acento
       if (payload.exp < Date.now() / 1000) return null;
-      return payload.email;
+      return { email: payload.email, nome: payload.nome || "" };
     } catch {
       return null;
     }
   }
 
   let sessaoEmail = null;
+  let sessaoNome = "";
 
   async function fazerLogin(email, senha) {
     const res = await fetch(`${CFG.apiBase}/api/login`, {
@@ -41,6 +43,27 @@
     if (!res.ok) throw new Error(data.error || "Não foi possível entrar.");
     setStoredToken(data.token);
     sessaoEmail = email;
+    sessaoNome = data.nome || "";
+  }
+
+  // Quem está pedindo, sem precisar escolher: vem do e-mail de login (a API devolve o nome; se não vier,
+  // montamos do e-mail). Depois acertamos acentos e grafia pela lista de nomes conhecidos
+  // (ex.: "Maisa" -> "Maísa", igual ao que já está na planilha).
+  function nomeSolicitante() {
+    if (DEMO) return "Demonstração";
+    const local = String(sessaoEmail || "").split("@")[0];
+    const doEmail = local.split(/[._-]+/).map((p) => p.replace(/\d+/g, "")).filter(Boolean)
+      .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(" ");
+    const nome = sessaoNome || doEmail;
+    const exato = CFG.solicitantes.find((s) => norm(s) === norm(nome));
+    if (exato) return exato;
+    if (norm(nome) !== norm(doEmail)) return nome; // nome escrito de propósito na lista da API: respeita
+    // Nome montado do e-mail: tenta casar com a lista ("keli.silva" -> "Keli"), só se for inequívoco.
+    const palavras = norm(nome).split(" ");
+    const completos = CFG.solicitantes.filter((s) => norm(s).split(" ").every((w) => palavras.includes(w)));
+    if (completos.length === 1) return completos[0];
+    const porPrimeiro = CFG.solicitantes.filter((s) => norm(s).split(" ")[0] === palavras[0]);
+    return porPrimeiro.length === 1 ? porPrimeiro[0] : nome;
   }
 
   function sair() {
@@ -249,7 +272,6 @@
       }
       await appendRows(novas);
       cache = null;
-      try { localStorage.setItem("agroturn-solicitante", solicitante); } catch {}
 
       const idIni = maxId + 1, idFim = maxId + novas.length;
       $("#protocoloOut").textContent = idIni === idFim ? `Nº ${idIni}` : `Nº ${idIni}–${idFim}`;
@@ -389,26 +411,11 @@
     $("#statAndamento").textContent = n;
   }
 
-  // Pré-seleciona o solicitante pelo e-mail de login (ex: victor.martins@... → "Victor Martins"),
-  // ou pela última escolha salva neste navegador.
-  function guessSolicitante() {
-    let last = null;
-    try { last = localStorage.getItem("agroturn-solicitante"); } catch {}
-    if (last && CFG.solicitantes.includes(last)) return last;
-    const local = norm(sessaoEmail).split("@")[0];
-    if (!local) return "";
-    const palavras = local.split(/[._-]+/).filter(Boolean);
-    const completo = CFG.solicitantes.filter((s) => norm(s).split(" ").every((w) => palavras.includes(w)));
-    const candidatos = completo.length ? completo : CFG.solicitantes.filter((s) => norm(s).split(" ")[0] === palavras[0]);
-    return candidatos.length === 1 ? candidatos[0] : "";
-  }
-
   function renderUser() {
     const area = $("#userArea");
     if (DEMO) { area.innerHTML = `<span class="muted small">Demonstração</span>`; return; }
     area.innerHTML = `<span class="name"></span><button class="btn ghost small" id="logoutBtn">Sair</button>`;
-    const nome = guessSolicitante() || String(sessaoEmail || "").split("@")[0];
-    $(".name", area).textContent = nome ? `Olá, ${nome}` : "";
+    $(".name", area).textContent = `Olá, ${nomeSolicitante()}`;
     $("#logoutBtn").addEventListener("click", sair);
   }
 
@@ -418,14 +425,15 @@
     document.body.classList.add("logado");
     renderUser();
 
-    const sel = $("#solicitante");
+    // O solicitante é quem entrou (não há mais o que escolher): fica fixo no formulário.
+    const quem = nomeSolicitante();
+    $("#solicitante").value = quem;
+    $("#solicitanteNome").textContent = quem;
+
+    // O filtro de "Acompanhar pedidos" continua com a lista de nomes (mais o de quem entrou, se for novo).
     const filtro = $("#filtroSolicitante");
-    CFG.solicitantes.forEach((s) => {
-      sel.add(new Option(s, s));
-      filtro.add(new Option(s, s));
-    });
-    const quem = guessSolicitante();
-    sel.value = quem;
+    const nomes = CFG.solicitantes.includes(quem) ? CFG.solicitantes : [...CFG.solicitantes, quem];
+    nomes.forEach((s) => filtro.add(new Option(s, s)));
     filtro.value = quem;
 
     addItem();
@@ -498,9 +506,10 @@
       return;
     }
     const token = getStoredToken();
-    const email = token && emailDoToken(token);
-    if (email) {
-      sessaoEmail = email;
+    const dados = token && dadosDoToken(token);
+    if (dados) {
+      sessaoEmail = dados.email;
+      sessaoNome = dados.nome;
       startApp();
       // Renova o login em segundo plano: enquanto a pessoa usar o site, ele nunca expira.
       // Se falhar por falta de rede, segue com o login atual; se a API recusar (ex.: e-mail
