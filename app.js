@@ -11,6 +11,10 @@
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+  // O e-mail é só a "porta de entrada" da tela: quem autentica de verdade é o Microsoft, com a
+  // mesma conta de sempre. Isso só evita que alguém tente entrar com conta pessoal por engano.
+  const domEmail = norm(CFG.dominioEmail).replace(/^@/, "");
+  const contaValida = (email) => norm(email).endsWith("@" + domEmail);
 
   let msal = null;
   let account = null;
@@ -432,6 +436,27 @@
     $("#refreshBtn").addEventListener("click", () => renderLista(true));
   }
 
+  function pedirLogin(erro) {
+    $("#loginView").hidden = false;
+    $("#loginError").hidden = !erro;
+    if (erro) $("#loginError").textContent = erro;
+    $("#loginForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const email = norm($("#loginEmail").value);
+      if (!contaValida(email)) {
+        $("#loginError").textContent = `Use seu e-mail @${domEmail} (o mesmo do Office/SharePoint da Agroturn).`;
+        $("#loginError").hidden = false;
+        $("#loginEmail").classList.add("invalid");
+        return;
+      }
+      msal.loginRedirect({ scopes: SCOPES, loginHint: email, extraQueryParameters: { domain_hint: domEmail } });
+    });
+    $("#loginEmail").addEventListener("input", () => {
+      $("#loginEmail").classList.remove("invalid");
+      $("#loginError").hidden = true;
+    });
+  }
+
   // ---------- Início ----------
   (async () => {
     if (DEMO) {
@@ -443,15 +468,19 @@
       await initAuth();
     } catch (err) {
       console.error(err);
-      $("#loginView").hidden = false;
-      $("#loginView .muted").textContent = `Erro ao iniciar o login: ${err.message}`;
+      pedirLogin(`Erro ao iniciar o login: ${err.message}`);
+      return;
+    }
+    if (account && !contaValida(account.username)) {
+      // Conta certa (é do tenant Agroturn, senão o login nem chegaria aqui), mas com e-mail
+      // fora do domínio esperado — sai e pede pra entrar de novo com o e-mail @agroturn.com.
+      await msal.logoutRedirect({ account, postLogoutRedirectUri: location.origin + location.pathname });
       return;
     }
     if (account) {
       startApp();
     } else {
-      $("#loginView").hidden = false;
-      $("#loginBtn").addEventListener("click", () => msal.loginRedirect({ scopes: SCOPES }));
+      pedirLogin();
     }
   })();
 })();
