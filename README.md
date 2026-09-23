@@ -110,6 +110,9 @@ entrada, e não excluir preserva o vínculo com o histórico.
 - `statusInicial`: status das linhas novas.
 - `separarNumeros`: `false` para gravar `12345;78456` numa linha só.
 - `tiposCertidao`: tipos disponíveis.
+- `dominioEmail`: domínio exigido na tela de login (ex. `agroturn.com`). A tela pede o e-mail nesse
+  formato em vez do botão genérico do Microsoft — mas quem autentica de verdade continua sendo o
+  Microsoft, com a mesma conta de sempre. Não é uma senha nova nem um sistema de login separado.
 
 ## Alternativa de hospedagem: Azure Static Web Apps
 
