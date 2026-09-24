@@ -62,7 +62,7 @@ Renomear uma coluna quebra.
   "Venceu em dd/mm". Pedidos que já estavam FINALIZADOS antes disso não têm a data de chegada; para eles
   o site usa a data do pedido como referência e diz que a data não foi registrada. Se quiser corrigir, crie na
   tabela a coluna **Finalizado em** e preencha (ela vale mais que o registro automático).
-- **Avisos no celular/computador** (opcional, passo 3b): o Fundiário é avisado quando chega pedido novo e
+- **Avisos no celular/computador** (passo 3b): o Fundiário é avisado quando chega pedido novo e
   quem pediu é avisado quando o status muda (e quando a certidão chega). Cada pessoa liga no avatar →
   *Ativar avisos neste aparelho*. No iPhone só funciona com o app instalado na Tela de Início.
 - **Sem internet (na fazenda):** o pedido fica guardado no aparelho e sai sozinho quando o sinal volta
@@ -173,23 +173,21 @@ tipo de permissão diferente — de "em nome de quem está logado" para "em nome
 
 ### 3b. Ativar os avisos (opcional)
 
-O `wrangler deploy` do passo 3 já publica o "Estado" da API (grava pedidos em fila, guarda o histórico e
-confere a planilha a cada 5 minutos). Para os **avisos** falta gerar a chave que identifica a Agroturn
-perante Chrome/Safari/Firefox:
+O `wrangler deploy` do passo 3 já publica o "Estado" da API (grava pedidos em fila, guarda o histórico,
+confere a planilha a cada 5 minutos e envia os avisos). A chave que identifica a Agroturn perante
+Chrome/Safari/Firefox é criada e guardada pela própria API na primeira vez — não há nada para gerar,
+copiar ou cadastrar. O que falta é dizer **quem recebe aviso de pedido novo** (o Fundiário), e-mails
+separados por vírgula:
 
-1. `cd worker` e rode `node gerar-vapid.js`. Ele mostra uma **chave pública** e uma **chave privada**.
-2. A privada vai só para o Cloudflare (cole quando ele pedir):
-   ```bash
-   wrangler secret put VAPID_PRIVATE_JWK
-   ```
-3. Quem deve receber aviso de **pedido novo** (o Fundiário), e-mails separados por vírgula:
-   ```bash
-   wrangler secret put FUNDIARIO_EMAILS
-   ```
-4. `wrangler deploy`
-5. Cole a chave **pública** em `vapidPublicKey` no `config.js` e publique o site (`git push`).
+```bash
+wrangler secret put FUNDIARIO_EMAILS
+```
+e depois \`wrangler deploy\`. Cada pessoa liga os avisos no próprio aparelho: avatar → *Ativar avisos neste
+aparelho* (e permitir notificações quando o navegador perguntar). O botão *Enviar aviso de teste* mostra o
+motivo quando algo falha. Se a permissão ficou **bloqueada** no navegador, é preciso liberar pelo cadeado
+ao lado do endereço do site (Notificações → Permitir) — o site não consegue desbloquear sozinho.
 
-Enquanto `vapidPublicKey` estiver vazio, o botão de avisos não aparece.
+(Se já existir o segredo antigo `VAPID_PRIVATE_JWK`, pode apagar: `wrangler secret delete VAPID_PRIVATE_JWK`.)
 
 ### 4. Aposentar o Forms
 

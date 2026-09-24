@@ -761,9 +761,45 @@
     return { reg, sub: await reg.pushManager.getSubscription() };
   }
 
+  // A chave pública dos avisos é da API (ela mesma gera e guarda o par) — nada a configurar aqui.
+  let chaveAvisos = null;
+  async function chaveDosAvisos() {
+    if (!chaveAvisos) chaveAvisos = (await api("/api/push/chave")).publica;
+    return chaveAvisos;
+  }
+  const bytesParaB64url = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+
+  async function inscrever(reg, chave) {
+    const nova = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlParaBytes(chave) });
+    await api("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: nova.toJSON(), nome: nomeSolicitante() }) });
+    return nova;
+  }
+
+  // Mantém a inscrição deste aparelho em dia: se ela foi feita com outra chave (ex.: antes de a API passar
+  // a cuidar disso), refaz sozinha — sem perguntar de novo, a permissão já foi dada.
+  async function sincronizarInscricao() {
+    if (DEMO || !pushSuportado() || Notification.permission !== "granted") return;
+    try {
+      const chave = await chaveDosAvisos();
+      let { reg, sub } = await inscricaoAtual();
+      if (!sub) return;
+      const chaveDaInscricao = sub.options?.applicationServerKey ? bytesParaB64url(sub.options.applicationServerKey) : null;
+      if (chaveDaInscricao !== chave) {
+        await api("/api/push/unsubscribe", { method: "POST", body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {});
+        await sub.unsubscribe();
+        await inscrever(reg, chave);
+      } else {
+        await api("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: sub.toJSON(), nome: nomeSolicitante() }) });
+      }
+    } catch (err) {
+      console.warn("não foi possível sincronizar os avisos:", err.message);
+    }
+  }
+
   async function atualizarPushUI() {
     const area = $("#pushArea");
-    if (DEMO || !CFG.vapidPublicKey) { area.hidden = true; return; }
+    if (DEMO) { area.hidden = true; return; }
+    try { await chaveDosAvisos(); } catch { area.hidden = true; return; } // API antiga ou sem internet: sem avisos por enquanto
     area.hidden = false;
     const btn = $("#pushBtn"), teste = $("#pushTeste"), dica = $("#pushDica");
     if (!pushSuportado()) {
@@ -796,8 +832,7 @@
         toast("Avisos desativados neste aparelho");
       } else {
         if ((await Notification.requestPermission()) !== "granted") { toast("Sem permissão, não dá para ativar os avisos"); return; }
-        const nova = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlParaBytes(CFG.vapidPublicKey) });
-        await api("/api/push/subscribe", { method: "POST", body: JSON.stringify({ subscription: nova.toJSON(), nome: nomeSolicitante() }) });
+        await inscrever(reg, await chaveDosAvisos());
         toast("Avisos ativados");
       }
     } catch (err) {
@@ -812,9 +847,7 @@
     try {
       const r = await api("/api/push/teste", { method: "POST", body: "{}" });
       const dica = $("#pushDica");
-      if (!r.configurado) {
-        dica.textContent = "A chave dos avisos (VAPID_PRIVATE_JWK) não está cadastrada na API.";
-      } else if (!r.tentativas) {
+      if (!r.tentativas) {
         dica.textContent = "A API não tem este aparelho inscrito. Desative e ative os avisos de novo.";
       } else if (r.enviados === r.tentativas) {
         dica.textContent = "Aviso enviado. Se não aparecer, veja se as notificações do navegador/Windows não estão silenciadas.";
@@ -912,6 +945,7 @@
     $("#filtroBusca").addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => renderLista(), 200); });
     $("#refreshBtn").addEventListener("click", () => renderLista(true));
     $("#pushBtn").addEventListener("click", alternarPush);
+    sincronizarInscricao();
     $("#pushTeste").addEventListener("click", testarPush);
 
     // Fila de envio: tenta ao abrir, quando a internet volta e quando o app volta para a tela.

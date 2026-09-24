@@ -6,6 +6,7 @@
 //   POST /api/refresh                                            -> { token, nome }   (renova o login)
 //   GET  /api/table                                              -> { headers, rows, finalizados }
 //   POST /api/pedidos        { chave, empreendimento, itens }    -> { ok, idIni, idFim, total }
+//   GET  /api/push/chave                                         -> { publica }   (chave pública dos avisos)
 //   POST /api/push/subscribe { subscription, nome }              -> { ok }   (ativar avisos neste aparelho)
 //   POST /api/push/unsubscribe { endpoint }                      -> { ok }
 //   POST /api/push/teste                                         -> { ok, enviados }
@@ -262,8 +263,7 @@ function vapidPublica(jwk) {
   return b64url(concat(Uint8Array.of(4), b64urlToBytes(jwk.x), b64urlToBytes(jwk.y)));
 }
 
-async function jwtVapid(env, endpoint) {
-  const jwk = JSON.parse(env.VAPID_PRIVATE_JWK);
+async function jwtVapid(jwk, env, endpoint) {
   const chave = await crypto.subtle.importKey("jwk", jwk, { name: "ECDSA", namedCurve: "P-256" }, false, ["sign"]);
   const cab = b64url(enc.encode(JSON.stringify({ typ: "JWT", alg: "ES256" })));
   const corpo = b64url(enc.encode(JSON.stringify({
@@ -277,8 +277,8 @@ async function jwtVapid(env, endpoint) {
 
 // Devolve { status, texto } do serviço de push (404/410 = aparelho não existe mais). O texto é a
 // explicação que o próprio serviço dá quando recusa (ex.: chave que não combina).
-async function enviarPush(env, sub, dados) {
-  const { jwt, pub } = await jwtVapid(env, sub.endpoint);
+async function enviarPush(env, jwk, sub, dados) {
+  const { jwt, pub } = await jwtVapid(jwk, env, sub.endpoint);
   const corpo = await criptografarPush(sub, JSON.stringify(dados));
   const res = await fetch(sub.endpoint, {
     method: "POST",
@@ -316,6 +316,7 @@ export class Estado {
       let dados;
       if (caminho === "/pedido") dados = await this.enfileirar(() => this.criarPedido(corpo));
       else if (caminho === "/tick") dados = await this.enfileirar(() => this.conferirPlanilha());
+      else if (caminho === "/chave") dados = await this.enfileirar(async () => ({ publica: vapidPublica(await this.chaveVapid()) }));
       else if (caminho === "/finalizados") dados = (await this.state.storage.get("fin")) || {};
       else if (caminho === "/inscrever") dados = await this.enfileirar(() => this.inscrever(corpo));
       else if (caminho === "/desinscrever") dados = await this.enfileirar(() => this.desinscrever(corpo));
@@ -507,14 +508,27 @@ export class Estado {
   }
 
   // ----- Avisos -----
+  // A chave que identifica a Agroturn perante os serviços de aviso é criada aqui, uma única vez, e fica
+  // guardada no próprio Estado — ninguém precisa gerar, copiar ou cadastrar nada à mão.
+  async chaveVapid() {
+    let jwk = await this.state.storage.get("vapid");
+    if (!jwk) {
+      const par = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+      jwk = await crypto.subtle.exportKey("jwk", par.privateKey);
+      await this.state.storage.put("vapid", jwk);
+    }
+    return jwk;
+  }
+
   async avisar(filtro, dados) {
+    const jwk = await this.chaveVapid();
     const subs = await this.state.storage.list({ prefix: "sub:" });
     const resumo = { tentativas: 0, enviados: 0, falhas: [] };
     for (const [chave, sub] of subs) {
       if (!filtro(sub)) continue;
       resumo.tentativas++;
       try {
-        const { status, texto } = await enviarPush(this.env, sub, dados);
+        const { status, texto } = await enviarPush(this.env, jwk, sub, dados);
         if (status === 404 || status === 410) {
           await this.state.storage.delete(chave); // aparelho saiu
           resumo.falhas.push({ status, texto: "aparelho não existe mais (inscrição removida)" });
@@ -525,7 +539,7 @@ export class Estado {
         }
       } catch (err) {
         console.error("push erro", err.message);
-        resumo.falhas.push({ status: 0, texto: err.message }); // ex.: VAPID_PRIVATE_JWK inválida
+        resumo.falhas.push({ status: 0, texto: err.message }); // ex.: falha de rede ou chave corrompida
       }
     }
     return resumo;
@@ -537,7 +551,6 @@ export class Estado {
   }
 
   async inscrever({ sessao, subscription, nome }) {
-    if (!this.env.VAPID_PRIVATE_JWK) throw new RespostaErro(503, "Avisos ainda não foram configurados na API.");
     const s = subscription;
     if (!s?.endpoint || !s?.keys?.p256dh || !s?.keys?.auth || !/^https:\/\//.test(s.endpoint)) {
       throw new RespostaErro(400, "Inscrição inválida.");
@@ -565,7 +578,7 @@ export class Estado {
       aba: "home",
       tag: "teste",
     });
-    return { ok: true, ...resumo, configurado: !!this.env.VAPID_PRIVATE_JWK };
+    return { ok: true, ...resumo, configurado: true };
   }
 }
 
@@ -625,6 +638,7 @@ export default {
       if (rota === "POST /api/pedidos") {
         return json(await chamarEstado(env, "/pedido", { sessao, pedido: corpo }), 200, env);
       }
+      if (rota === "GET /api/push/chave") return json(await chamarEstado(env, "/chave", {}), 200, env);
       if (rota === "POST /api/push/subscribe") {
         return json(await chamarEstado(env, "/inscrever", { sessao, subscription: corpo.subscription, nome: corpo.nome }), 200, env);
       }

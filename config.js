@@ -5,10 +5,6 @@ window.APP_CONFIG = {
   // Deixe vazio ("") para rodar em MODO DEMONSTRAÇÃO (salva só no navegador).
   apiBase: "https://agroturn-certidoes-api.agroturn-certidoes.workers.dev",
 
-  // Chave PÚBLICA dos avisos (notificações). Gere com "node worker/gerar-vapid.js" e cole aqui.
-  // Vazia = o botão "Ativar avisos" não aparece.
-  vapidPublicKey: "BCRjUopZm3lzapcVG73VbpXtiJ_S5rPMSVQuwYu0szAPH3pPBXXK82VLKVTm6dA0s31PUl4juW0jF_DwslCcEME",
-
   // Dias de validade da certidão, contados a partir de quando ela chega (status FINALIZADO).
   diasValidade: 30,
 
