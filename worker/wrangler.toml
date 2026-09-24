@@ -3,8 +3,8 @@ main = "worker.js"
 compatibility_date = "2024-11-01"
 
 # Valores não-secretos (podem ficar aqui, este arquivo é público no repositório).
-# Os segredos de verdade (senha, chave da Microsoft) são configurados à parte com
-# "wrangler secret put" — nunca aqui.
+# Os segredos de verdade (senha, chave da Microsoft, lista de e-mails, chave dos avisos) são
+# configurados à parte com "wrangler secret put" — nunca aqui.
 [vars]
 GRAPH_TENANT_ID = "dab95a95-89a3-41a2-b053-f4f88b513953"
 GRAPH_CLIENT_ID = "22472c6d-12aa-4cd4-a27c-d096a26ada92"
@@ -12,3 +12,20 @@ DRIVE_ID = "b!x18PLiznRkepMx7QItAI0M_XmqvkJp1MnIWn2uOO-UCJGnZo60jYR7phsMb5tPGD"
 ITEM_ID = "01UQHUCRED3ZSZMLLY6RFLN222BYAHTHRL"
 WORKSHEET = "Controle de Certidão"
 ALLOWED_ORIGIN = "https://agroturn-certidoes.github.io"
+TIMEZONE = "America/Cuiaba"
+STATUS_INICIAL = "AGUARDANDO PEDIDO"
+
+# "Estado": peça única que grava os pedidos em fila (sem Id repetido), lembra do histórico de status
+# e envia os avisos. Plano gratuito do Cloudflare exige o formato SQLite.
+[[durable_objects.bindings]]
+name = "ESTADO"
+class_name = "Estado"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Estado"]
+
+# A cada 5 minutos a API confere a planilha: registra quando um pedido virou FINALIZADO
+# (a certidão vale 30 dias a partir daí) e manda os avisos.
+[triggers]
+crons = ["*/5 * * * *"]
