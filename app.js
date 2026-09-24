@@ -811,7 +811,19 @@
   async function testarPush() {
     try {
       const r = await api("/api/push/teste", { method: "POST", body: "{}" });
-      toast(r.enviados ? "Aviso de teste enviado — deve chegar em instantes" : "Não achei este aparelho inscrito. Desative e ative de novo.");
+      const dica = $("#pushDica");
+      if (!r.configurado) {
+        dica.textContent = "A chave dos avisos (VAPID_PRIVATE_JWK) não está cadastrada na API.";
+      } else if (!r.tentativas) {
+        dica.textContent = "A API não tem este aparelho inscrito. Desative e ative os avisos de novo.";
+      } else if (r.enviados === r.tentativas) {
+        dica.textContent = "Aviso enviado. Se não aparecer, veja se as notificações do navegador/Windows não estão silenciadas.";
+      } else {
+        const f = r.falhas[0] || {};
+        dica.textContent = `O serviço de avisos recusou (código ${f.status}${f.servico ? ` · ${f.servico}` : ""}): ${f.texto || "sem detalhe"}`;
+        console.warn("aviso de teste falhou", r);
+      }
+      toast(r.enviados ? "Aviso de teste enviado" : "O aviso de teste não foi entregue — veja o motivo no menu");
     } catch (err) {
       toast(`Não foi possível: ${err.message}`);
     }

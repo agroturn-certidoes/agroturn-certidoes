@@ -275,7 +275,8 @@ async function jwtVapid(env, endpoint) {
   return { jwt: `${cab}.${corpo}.${b64url(sig)}`, pub: vapidPublica(jwk) };
 }
 
-// Devolve o status HTTP do serviço de push (404/410 = aparelho não existe mais).
+// Devolve { status, texto } do serviço de push (404/410 = aparelho não existe mais). O texto é a
+// explicação que o próprio serviço dá quando recusa (ex.: chave que não combina).
 async function enviarPush(env, sub, dados) {
   const { jwt, pub } = await jwtVapid(env, sub.endpoint);
   const corpo = await criptografarPush(sub, JSON.stringify(dados));
@@ -290,7 +291,7 @@ async function enviarPush(env, sub, dados) {
     },
     body: corpo,
   });
-  return res.status;
+  return { status: res.status, texto: res.ok ? "" : (await res.text().catch(() => "")).slice(0, 200) };
 }
 
 // ---------- Estado (Durable Object): um só, atende um pedido por vez ----------
@@ -508,19 +509,26 @@ export class Estado {
   // ----- Avisos -----
   async avisar(filtro, dados) {
     const subs = await this.state.storage.list({ prefix: "sub:" });
-    let enviados = 0;
+    const resumo = { tentativas: 0, enviados: 0, falhas: [] };
     for (const [chave, sub] of subs) {
       if (!filtro(sub)) continue;
+      resumo.tentativas++;
       try {
-        const status = await enviarPush(this.env, sub, dados);
-        if (status === 404 || status === 410) await this.state.storage.delete(chave); // aparelho saiu
-        else if (status >= 200 && status < 300) enviados++;
-        else console.error("push falhou", status);
+        const { status, texto } = await enviarPush(this.env, sub, dados);
+        if (status === 404 || status === 410) {
+          await this.state.storage.delete(chave); // aparelho saiu
+          resumo.falhas.push({ status, texto: "aparelho não existe mais (inscrição removida)" });
+        } else if (status >= 200 && status < 300) resumo.enviados++;
+        else {
+          console.error("push falhou", status, texto);
+          resumo.falhas.push({ status, texto, servico: new URL(sub.endpoint).host });
+        }
       } catch (err) {
         console.error("push erro", err.message);
+        resumo.falhas.push({ status: 0, texto: err.message }); // ex.: VAPID_PRIVATE_JWK inválida
       }
     }
-    return enviados;
+    return resumo;
   }
 
   async hashEndpoint(endpoint) {
@@ -551,13 +559,13 @@ export class Estado {
   }
 
   async testar({ sessao }) {
-    const enviados = await this.avisar((s) => s.email === sessao.email, {
+    const resumo = await this.avisar((s) => s.email === sessao.email, {
       titulo: "Avisos ativados",
       corpo: "Está tudo certo: você vai receber avisos dos pedidos aqui.",
       aba: "home",
       tag: "teste",
     });
-    return { ok: true, enviados };
+    return { ok: true, ...resumo, configurado: !!this.env.VAPID_PRIVATE_JWK };
   }
 }
 
