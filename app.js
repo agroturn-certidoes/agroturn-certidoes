@@ -486,6 +486,7 @@
           titulo: "Pedido enviado",
           ref: rotuloIds(r),
           resumo: `${r.total} ${r.total > 1 ? "certidões registradas" : "certidão registrada"} para ${pedido.empreendimento}. ` +
+            (r.aviso?.enviados ? "O Setor Fundiário já foi avisado. " : "") +
             "O Setor Fundiário vai preencher o protocolo do RI Digital depois de solicitar no ONR.",
         });
       } catch (err) {
@@ -850,7 +851,8 @@
       if (!r.tentativas) {
         dica.textContent = "A API não tem este aparelho inscrito. Desative e ative os avisos de novo.";
       } else if (r.enviados === r.tentativas) {
-        dica.textContent = "Aviso enviado. Se não aparecer, veja se as notificações do navegador/Windows não estão silenciadas.";
+        dica.textContent = "Aviso enviado. Se não aparecer, veja se as notificações do navegador/Windows não estão silenciadas." +
+          (r.conferidoEm ? ` Planilha conferida por último em ${new Date(r.conferidoEm).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}.` : " A planilha ainda não foi conferida.");
       } else {
         const f = r.falhas[0] || {};
         dica.textContent = `O serviço de avisos recusou (código ${f.status}${f.servico ? ` · ${f.servico}` : ""}): ${f.texto || "sem detalhe"}`;

@@ -315,7 +315,7 @@ export class Estado {
     try {
       let dados;
       if (caminho === "/pedido") dados = await this.enfileirar(() => this.criarPedido(corpo));
-      else if (caminho === "/tick") dados = await this.enfileirar(() => this.conferirPlanilha());
+      else if (caminho === "/tick") dados = await this.enfileirar(() => this.conferirPlanilha(corpo));
       else if (caminho === "/chave") dados = await this.enfileirar(async () => ({ publica: vapidPublica(await this.chaveVapid()) }));
       else if (caminho === "/finalizados") dados = (await this.state.storage.get("fin")) || {};
       else if (caminho === "/inscrever") dados = await this.enfileirar(() => this.inscrever(corpo));
@@ -406,24 +406,27 @@ export class Estado {
     if (snap) {
       for (let i = 0; i < novas.length; i++) snap.ids[String(maxId + i + 1)] = statusInicial.toUpperCase();
       await st.put("snap", snap);
-      const tiposTxt = [...new Set(linhasPedido.map((l) => l.tipo))].join(", ");
-      await this.avisar(
-        (s) => listaFundiario(env).includes(s.email) && s.email !== sessao.email,
-        {
-          titulo: `Novo pedido — ${empreendimento}`,
-          corpo: `${solicitante}: ${novas.length} ${novas.length > 1 ? "certidões" : "certidão"} (${tiposTxt})`,
-          aba: "acompanhar",
-          tag: `novo-${maxId + 1}`,
-        }
-      );
     }
-    return resp;
+    const tiposTxt = [...new Set(linhasPedido.map((l) => l.tipo))].join(", ");
+    // Quem enviou não é avisado do próprio pedido.
+    const aviso = await this.avisar(
+      (s) => listaFundiario(env).includes(s.email) && s.email !== sessao.email,
+      {
+        titulo: `Novo pedido — ${empreendimento}`,
+        corpo: `${solicitante}: ${novas.length} ${novas.length > 1 ? "certidões" : "certidão"} (${tiposTxt})`,
+        aba: "acompanhar",
+        tag: `novo-${maxId + 1}`,
+      }
+    );
+    return { ...resp, aviso: { tentativas: aviso.tentativas, enviados: aviso.enviados } };
   }
 
-  // ----- Conferência periódica (cron, a cada 5 minutos) -----
-  async conferirPlanilha() {
+  // ----- Conferência da planilha (cron a cada 5 min + sempre que alguém abre o site, no máx. 1x/min) -----
+  async conferirPlanilha({ minimoSeg = 0 } = {}) {
     const env = this.env;
     const st = this.state.storage;
+    const anterior = await st.get("snap");
+    if (minimoSeg && anterior && Date.now() - anterior.em < minimoSeg * 1000) return { recente: true };
     const { headers, rows } = await lerTabela(env);
     const c = colIndex(headers);
     if (c.id < 0 || c.status < 0) return { ignorado: "planilha sem colunas Id/Status" };
@@ -444,7 +447,7 @@ export class Estado {
       };
     }
 
-    const snap = await st.get("snap");
+    const snap = anterior;
     if (!snap) {
       await st.put("snap", { ids: atual, em: Date.now() }); // primeira leitura: só memoriza, sem avisar
       return { inicial: true, total: Object.keys(atual).length };
@@ -578,7 +581,8 @@ export class Estado {
       aba: "home",
       tag: "teste",
     });
-    return { ok: true, ...resumo, configurado: true };
+    const snap = await this.state.storage.get("snap");
+    return { ok: true, ...resumo, configurado: true, conferidoEm: snap ? snap.em : null };
   }
 }
 
@@ -618,7 +622,7 @@ async function handleLogin(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: cors(env) });
     const url = new URL(request.url);
     const rota = `${request.method} ${url.pathname}`;
@@ -632,6 +636,9 @@ export default {
         return json({ token: await assinarToken(sessao.email, sessao.nome, env), nome: sessao.nome }, 200, env);
       }
       if (rota === "GET /api/table") {
+        // Quem abre o site também dispara a conferência (no máximo 1x por minuto): mudanças de status
+        // chegam mais rápido que esperar o agendamento de 5 em 5 minutos.
+        ctx?.waitUntil?.(chamarEstado(env, "/tick", { minimoSeg: 60 }).catch((err) => console.error("tick falhou:", err.message)));
         const [tabela, finalizados] = await Promise.all([lerTabela(env), chamarEstado(env, "/finalizados")]);
         return json({ ...tabela, finalizados }, 200, env);
       }

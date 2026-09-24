@@ -65,6 +65,11 @@ Renomear uma coluna quebra.
 - **Avisos no celular/computador** (passo 3b): o Fundiário é avisado quando chega pedido novo e
   quem pediu é avisado quando o status muda (e quando a certidão chega). Cada pessoa liga no avatar →
   *Ativar avisos neste aparelho*. No iPhone só funciona com o app instalado na Tela de Início.
+  Detalhes: quem envia o pedido **não** é avisado do próprio pedido (mesmo estando na lista do Fundiário);
+  a mudança de status feita na planilha é percebida em até 5 minutos (agendamento) ou no máximo 1 minuto
+  depois de alguém abrir o site. Depois de enviar, o site diz "O Setor Fundiário já foi avisado" quando
+  algum aparelho recebeu. Para testar o aviso de mudança: envie um pedido, mude o status dele na planilha e
+  espere.
 - **Sem internet (na fazenda):** o pedido fica guardado no aparelho e sai sozinho quando o sinal volta
   (uma faixa avisa). O que a pessoa digita vira rascunho, recuperado se a tela fechar. A lista de
   acompanhamento mostra a última cópia, com aviso de "sem conexão".
