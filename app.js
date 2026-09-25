@@ -248,10 +248,10 @@
     const quando = a.pedidoEm !== null ? diaDe(a.pedidoEm) : "data desconhecida";
     const quem = `${a.solicitante || "alguém"}${a.empreendimento ? ` — ${a.empreendimento}` : ""}`;
     if (!a.forte) {
-      return { nivel: "info", texto: `Mesmo número em outro cartório (${a.cartorio || "?"}): ${a.status || "sem status"}, pedido em ${quando} por ${quem}.` };
+      return { nivel: "info", texto: `Mesmo número em outro cartório (${a.cartorio || "?"}): ${a.status || "novo, ainda sem andamento"}, pedido em ${quando} por ${quem}.` };
     }
     if (!a.finalizado) {
-      return { nivel: "alerta", texto: `Já existe pedido em andamento (${a.status || "sem status"}), feito em ${quando} por ${quem}.` };
+      return { nivel: "alerta", texto: `Já existe pedido em andamento (${a.status || "novo, ainda sem andamento"}), feito em ${quando} por ${quem}.` };
     }
     if (a.vig) {
       if (a.vig.vigente) {
@@ -589,6 +589,9 @@
   // ---------- UI: acompanhar ----------
   const STATUS_CLASS = [["TAXA", "taxa"], ["PAGAMENTO", "pagamento"], ["PEDIDO", "st-pedido"], ["FINALIZ", "finalizado"]];
   const statusClass = (s) => (STATUS_CLASS.find(([k]) => String(s).toUpperCase().includes(k)) || [, ""])[1];
+  // Pedido sem status na planilha (recém-enviado) aparece como "NOVO" só aqui no site.
+  const rotuloStatus = (s) => String(s ?? "").trim().toUpperCase() || "NOVO";
+  const descStatus = (s) => (CFG.statusDescricoes || {})[rotuloStatus(s)] || "";
 
   async function renderLista(force = false) {
     const lista = $("#listaPedidos");
@@ -613,7 +616,7 @@
 
       // Resumo por status
       const counts = {};
-      filtradas.forEach((r) => { const s = r[c.status] || "SEM STATUS"; counts[s] = (counts[s] || 0) + 1; });
+      filtradas.forEach((r) => { const s = rotuloStatus(r[c.status]); counts[s] = (counts[s] || 0) + 1; });
       $("#statusResumo").innerHTML = Object.entries(counts)
         .map(([s, n]) => `<span class="chip"><span class="badge ${statusClass(s)}">${esc(s)}</span> ${n}</span>`).join("");
 
@@ -649,7 +652,7 @@
             <td>${esc(r[c.tipo])} · <strong>${esc(r[c.numero])}</strong>${r[c.obs] ? `<br><span class="muted small">${esc(r[c.obs])}</span>` : ""}
               ${r[c.protocolo] ? `<br><span class="muted small">Protocolo RI Digital: ${esc(r[c.protocolo])}</span>` : ""}</td>
             <td class="cart">${esc(r[c.cartorio])}</td>
-            <td class="status"><span class="badge ${statusClass(r[c.status])}">${esc(r[c.status] || "—")}</span>${vig}</td>
+            <td class="status"><span class="badge ${statusClass(r[c.status])}" ${descStatus(r[c.status]) ? `title="${esc(descStatus(r[c.status]))}"` : ""}>${esc(rotuloStatus(r[c.status]))}</span>${descStatus(r[c.status]) ? `<span class="st-desc">${esc(descStatus(r[c.status]))}</span>` : ""}${vig}</td>
           </tr>`;
         }).join("");
         return `

@@ -13,7 +13,8 @@ ITEM_ID = "01UQHUCRED3ZSZMLLY6RFLN222BYAHTHRL"
 WORKSHEET = "Controle de Certidão"
 ALLOWED_ORIGIN = "https://agroturn-certidoes.github.io"
 TIMEZONE = "America/Cuiaba"
-STATUS_INICIAL = "AGUARDANDO PEDIDO"
+# Status de pedido novo: em branco de propósito (o Fundiário escolhe a etapa na planilha).
+STATUS_INICIAL = ""
 
 # "Estado": peça única que grava os pedidos em fila (sem Id repetido), lembra do histórico de status
 # e envia os avisos. Plano gratuito do Cloudflare exige o formato SQLite.

@@ -12,10 +12,19 @@ window.APP_CONFIG = {
   // Quem realmente autoriza é a lista de e-mails configurada na API (worker/wrangler.toml + secret).
   dominioEmail: "agroturn.com.br",
 
-  // Valor gravado na coluna "Status" de cada novo pedido.
-  // Como o pedido acabou de chegar (o Fundiário ainda não solicitou no RI Digital),
-  // o padrão é "AGUARDANDO PEDIDO". Troque aqui se o fluxo de vocês usar outro valor inicial.
-  statusInicial: "AGUARDANDO PEDIDO",
+  // Valor gravado na coluna "Status" de cada novo pedido: EM BRANCO de propósito — o Fundiário escolhe
+  // a etapa na planilha. (Só vale no modo demonstração; no modo real quem grava é a API — STATUS_INICIAL.)
+  statusInicial: "",
+
+  // O que cada etapa quer dizer (aparece embaixo do status em "Acompanhar pedidos").
+  // Chaves em MAIÚSCULAS, como estão na planilha. Pedido sem status aparece como "NOVO".
+  statusDescricoes: {
+    "NOVO": "Recebido — o Fundiário ainda vai dar andamento.",
+    "AGUARDANDO TAXA": "Aguardando o cartório informar o valor da taxa.",
+    "AGUARDANDO PAGAMENTO": "Boleto enviado — aguardando o pagamento.",
+    "AGUARDANDO PEDIDO": "Pago — aguardando a certidão chegar.",
+    "FINALIZADO": "Certidão entregue.",
+  },
 
   // true = "12345;78456" vira uma linha por número.
   separarNumeros: true,

@@ -41,11 +41,21 @@ Colunas gravadas em cada linha nova:
 | Solicitante | o nome de quem entrou, tirado do e-mail de login (não há mais o que escolher) |
 | Nome do empreendimento, Tipo de Certidão, Nº da Matrícula/Transcrição, Observações, Cartório Responsável | preenchidos no site |
 | Responsável | vazio (o Fundiário preenche com quem for solicitar no RI Digital) |
-| Status | `AGUARDANDO PEDIDO` (ajustável em `config.js` — troque se o fluxo de vocês usar outro valor inicial) |
+| Status | **em branco** — o Fundiário escolhe a etapa na planilha (no site o pedido sem status aparece como "NOVO") |
 | Recibo | desmarcado |
 
 Depois de enviado, o site mostra o **número do pedido** (a faixa de Id das linhas criadas, ex. `Nº 74–77`)
 como referência — não um protocolo, já que ele ainda não existe nesse momento.
+
+**Etapas do Status** (o Fundiário troca na planilha; o site mostra o significado e avisa quem pediu):
+
+| Status | Significa |
+|---|---|
+| *(em branco)* | pedido recebido; o Fundiário ainda vai dar andamento |
+| `AGUARDANDO TAXA` | aguardando o cartório informar o valor da taxa (emolumento) |
+| `AGUARDANDO PAGAMENTO` | boleto enviado; aguardando o pagamento |
+| `AGUARDANDO PEDIDO` | pago; aguardando a certidão chegar |
+| `FINALIZADO` | certidão entregue (a partir daqui contam os 30 dias de validade) |
 
 As colunas são encontradas **pelo nome do cabeçalho**, então mudar a ordem delas não quebra o site.
 Renomear uma coluna quebra.
@@ -203,7 +213,9 @@ entrada, e não excluir preserva o vínculo com o histórico.
 ## Ajustes comuns (`config.js`)
 
 - `solicitantes`: nomes conhecidos, com a grafia da planilha. Servem para acertar acentos do nome tirado do e-mail e para o filtro de "Acompanhar pedidos". Quem não estiver na lista continua conseguindo pedir (o nome sai do e-mail).
-- `statusInicial`: status das linhas novas.
+- `statusDescricoes`: o texto explicativo de cada etapa mostrado em "Acompanhar pedidos".
+- `statusInicial`: só no modo demonstração (vazio). No modo real, o status inicial vem de `STATUS_INICIAL`
+  no `worker/wrangler.toml` (também vazio).
 - `separarNumeros`: `false` para gravar `12345;78456` numa linha só.
 - `tiposCertidao`: tipos disponíveis.
 - `dominioEmail`: domínio mostrado/validado na tela de login (ex. `agroturn.com.br`). Quem realmente

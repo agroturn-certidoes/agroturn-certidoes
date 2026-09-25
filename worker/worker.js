@@ -19,6 +19,13 @@
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const TIPOS_PADRAO = ["Matrícula", "Cadeia Dominial", "Transcrição"];
+// O que cada etapa quer dizer (usado nos avisos). Pedido novo não tem etapa: o Status fica em branco.
+const STATUS_TEXTO = {
+  "AGUARDANDO TAXA": "aguardando o cartório informar o valor da taxa",
+  "AGUARDANDO PAGAMENTO": "boleto enviado, aguardando o pagamento",
+  "AGUARDANDO PEDIDO": "pago, aguardando a certidão chegar",
+  "FINALIZADO": "certidão entregue",
+};
 const enc = new TextEncoder();
 
 function cors(env) {
@@ -369,7 +376,8 @@ export class Estado {
     if (!Number.isFinite(quando) || quando > agora + 5 * 60000 || quando < agora - 30 * 86400000) quando = agora;
     const serial = serialExcel(new Date(quando), env.TIMEZONE || "America/Cuiaba");
     const solicitante = resolverSolicitante(sessao, pedido?.solicitante);
-    const statusInicial = env.STATUS_INICIAL || "AGUARDANDO PEDIDO";
+    // Pedido novo entra com o Status em BRANCO: quem dá andamento (Fundiário) escolhe a etapa na planilha.
+    const statusInicial = String(env.STATUS_INICIAL ?? "").trim();
 
     const maxId = c.id < 0 ? 0 : Math.max(0, ...rows.map((r) => Number(r[c.id]) || 0));
     const novas = linhasPedido.map((l, i) => {
@@ -385,7 +393,7 @@ export class Estado {
       set("obs", l.obs);
       set("cartorio", l.cartorio);
       set("responsavel", "");
-      set("status", statusInicial);
+      set("status", statusInicial || null);
       set("recibo", false);
       set("enviadoPor", sessao.email);
       return linha;
@@ -499,8 +507,8 @@ export class Estado {
       await this.avisar((s) => norm(s.nome) === norm(f.solicitante), {
         titulo: finalizado ? "Certidão chegou" : "Pedido atualizado",
         corpo: finalizado
-          ? `${f.empreendimento}: ${o} — FINALIZADO. Vale 30 dias a partir de hoje.`
-          : `${f.empreendimento}: ${o} — ${f.status}`,
+          ? `${f.empreendimento}: ${o} — certidão entregue. Vale 30 dias a partir de hoje.`
+          : `${f.empreendimento}: ${o} — ${STATUS_TEXTO[f.status] || f.status.toLowerCase() || "sem etapa definida"}`,
         aba: "acompanhar",
         tag: `status-${ids[0]}`,
       });
